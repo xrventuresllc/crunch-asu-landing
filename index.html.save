@@ -5,20 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crunch — ASU Pilot</title>
 
-    <!-- Favicon -->
     <link rel="icon" href="/favicon.ico" />
 
-    <!-- Open Graph / Twitter -->
     <meta property="og:title" content="Crunch — ASU Pilot" />
     <meta property="og:description" content="AI meal prep & training planner for students and coaches." />
     <meta property="og:image" content="https://crunch-asu-landing.vercel.app/og.png" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://crunch-asu-landing.vercel.app/" />
+    <meta property="og:url" content="https://crunch-asu-landing.vercel.app" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>
-    <!-- Vite will transform this to /assets/... in the prod build -->
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+    <script type="module" src<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crunch — ASU Pilot</title>
+
+    <link rel="icon" href="/favicon.ico" />
+
