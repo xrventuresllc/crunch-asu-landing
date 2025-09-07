@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xgvlpgvd' as const;
+// Your logo in /public
+const LOGO_SRC = '/crunch-logo.png';
+
 export default function App() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -7,8 +11,8 @@ export default function App() {
   const [role, setRole] = useState<'Student' | 'Coach' | 'Other'>('Student');
   const [coachProgram, setCoachProgram] = useState('');
 
-  // Your Formspree endpoint (set by request)
-  const endpoint = 'https://formspree.io/f/xgvlpgvd' as const;
+  // simple image fallback
+  const [logoOk, setLogoOk] = useState(true);
 
   // Capture UTM params for basic attribution
   const [utm, setUtm] = useState<Record<string, string>>({});
@@ -22,7 +26,9 @@ export default function App() {
         if (v) collected[k] = v;
       });
       setUtm(collected);
-    } catch {/* noop */}
+    } catch {
+      /* noop */
+    }
   }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -44,7 +50,7 @@ export default function App() {
 
     // Append extras
     data.append('source', 'asu-landing');
-    data.append('site_version', '2025-09-05');
+    data.append('site_version', '2025-09-07');
     if (role === 'Coach' && coachProgram.trim()) {
       data.append('coach_program', coachProgram.trim());
     }
@@ -52,7 +58,7 @@ export default function App() {
 
     setLoading(true);
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(FORMSPREE_ENDPOINT, {
         method: 'POST',
         headers: { Accept: 'application/json' },
         body: data,
@@ -86,7 +92,18 @@ export default function App() {
       <header className="sticky top-0 z-40 backdrop-blur border-b border-neutral-800/60 bg-neutral-950/70">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-md bg-emerald-500" />
+            {logoOk ? (
+              <img
+                src={LOGO_SRC}
+                alt="Crunch logo"
+                className="h-7 w-7 rounded-md object-contain"
+                loading="eager"
+                decoding="async"
+                onError={() => setLogoOk(false)}
+              />
+            ) : (
+              <div className="h-7 w-7 rounded-md bg-emerald-500" />
+            )}
             <span className="font-semibold tracking-tight">Crunch</span>
             <span className="ml-2 hidden sm:inline-block text-xs text-neutral-400">ASU Pilot</span>
           </div>
@@ -118,7 +135,7 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
           <div>
             <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">
-              AI meal prep & training planner for <span className="text-emerald-400">ASU</span>
+              AI meal prep & training planner for <span className="text-[#FFC627]">ASU</span>
             </h1>
             <p className="mt-4 text-neutral-300 max-w-xl">
               Crunch helps students, athletes, and coaches plan fast, healthy meals and simple training schedules.
@@ -140,19 +157,14 @@ export default function App() {
                 See how it works
               </a>
             </div>
-            <p className="mt-3 text-xs text-neutral-500">
-              Fall pilot • Limited seats • Weekly feedback loops
-            </p>
-            <p className="mt-1 text-xs text-neutral-500">
-              Founded by <span className="font-medium">Xuru Ren</span>.
-            </p>
+            <p className="mt-3 text-xs text-neutral-500">Fall pilot • Limited seats • Weekly feedback loops</p>
+            <p className="mt-1 text-xs text-neutral-500">Founded by <span className="font-medium">Xuru Ren</span>.</p>
           </div>
 
           {/* Right: simple product mock */}
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
             <div className="text-sm text-neutral-400">Today • Planner</div>
             <div className="mt-3 space-y-3">
-              {/* Macro bars */}
               <Bar label="Calories" value={0.72} suffix="1,780 / 2,450" />
               <Bar label="Protein" value={0.88} suffix="155 / 176g" />
               <Bar label="Carbs" value={0.51} suffix="120 / 235g" />
@@ -288,10 +300,7 @@ export default function App() {
                   Thanks! We’ll email you next steps (from <span className="font-medium">xrventuresllc@gmail.com</span>).
                 </p>
                 <div className="mt-6 flex items-center justify-center gap-3">
-                  <a
-                    href="#faq"
-                    className="rounded-lg border border-neutral-800 px-4 py-2 text-sm hover:bg-neutral-900"
-                  >
+                  <a href="#faq" className="rounded-lg border border-neutral-800 px-4 py-2 text-sm hover:bg-neutral-900">
                     Read FAQ
                   </a>
                   <button
@@ -328,22 +337,10 @@ export default function App() {
         <h2 className="text-3xl md:text-4xl font-bold">FAQ</h2>
         <div className="mt-6 grid md:grid-cols-2 gap-6">
           {[
-            {
-              q: 'Is this live?',
-              a: 'Core features are working (AI Meal Chat, Planner, macro bars). Trainer dashboard v1 ships during the pilot.',
-            },
-            {
-              q: 'Who is Crunch for?',
-              a: 'Students, athletes, and coaches who want simple, fast nutrition and training planning.',
-            },
-            {
-              q: 'How do I join the pilot?',
-              a: 'Use the form above; we onboard in small cohorts and prioritize @asu.edu emails.',
-            },
-            {
-              q: 'How is feedback used?',
-              a: 'We run weekly sprints; your feedback directly shapes features and pricing.',
-            },
+            { q: 'Is this live?', a: 'Core features are working (AI Meal Chat, Planner, macro bars). Trainer dashboard v1 ships during the pilot.' },
+            { q: 'Who is Crunch for?', a: 'Students, athletes, and coaches who want simple, fast nutrition and training planning.' },
+            { q: 'How do I join the pilot?', a: 'Use the form above; we onboard in small cohorts and prioritize @asu.edu emails.' },
+            { q: 'How is feedback used?', a: 'We run weekly sprints; your feedback directly shapes features and pricing.' },
           ].map((item) => (
             <div key={item.q} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
               <h4 className="font-semibold">{item.q}</h4>
@@ -369,7 +366,11 @@ export default function App() {
       <footer className="mt-auto border-t border-neutral-800/60">
         <div className="mx-auto max-w-6xl px-4 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-neutral-300">
-            <div className="h-6 w-6 rounded-md bg-emerald-500" />
+            {logoOk ? (
+              <img src={LOGO_SRC} alt="Crunch logo" className="h-6 w-6 rounded-md object-contain" />
+            ) : (
+              <div className="h-6 w-6 rounded-md bg-emerald-500" />
+            )}
             <span className="font-semibold">Crunch</span>
             <span className="text-neutral-500">© {new Date().getFullYear()}</span>
           </div>
