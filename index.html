@@ -2,13 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
 
-    <!-- Professional tab title (keep ASU in the hero, not the title) -->
-    <title>Crunch — AI meal prep & training planner</title>
-    <meta name="description" content="AI meal prep & training planner for students, athletes, and coaches." />
+    <!-- Tab title (keep campus mention in the hero, not here) -->
+    <title>Crunch — AI meal prep &amp; training planner</title>
+    <meta
+      name="description"
+      content="AI meal prep & training planner for students, athletes, and coaches."
+    />
 
-    <!-- Favicons: use your logo so there's no heart emoji -->
+    <!-- Favicons (use your logo; add /apple-touch-icon.png if available) -->
     <link rel="icon" href="/crunch-logo.png" type="image/png" />
     <link rel="shortcut icon" href="/crunch-logo.png" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -16,26 +22,77 @@
     <!-- Theming -->
     <meta name="theme-color" content="#0a0a0a" />
     <meta name="color-scheme" content="dark light" />
+    <meta name="format-detection" content="telephone=no" />
 
-    <!-- Canonical -->
+    <!-- Base & canonical -->
+    <base href="/" />
     <link rel="canonical" href="https://crunch-asu-landing.vercel.app/" />
+
+    <!-- Performance: preconnect to external services used on submit/analytics -->
+    <link rel="preconnect" href="https://formspree.io" />
+    <link rel="preconnect" href="https://plausible.io" />
 
     <!-- Open Graph / Twitter -->
     <meta property="og:site_name" content="Crunch" />
-    <meta property="og:title" content="Crunch — AI meal prep & training planner" />
+    <meta property="og:title" content="Crunch — AI meal prep &amp; training planner" />
     <meta property="og:description" content="AI meal prep & training planner for students, athletes, and coaches." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://crunch-asu-landing.vercel.app/" />
-    <!-- Use your logo as a safe default; replace with /og.png later if you add a social card -->
+    <!-- Replace with /og.png (1200x630) when ready -->
     <meta property="og:image" content="/crunch-logo.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Crunch — AI meal prep & training planner" />
+    <meta name="twitter:title" content="Crunch — AI meal prep &amp; training planner" />
     <meta name="twitter:description" content="AI meal prep & training planner for students, athletes, and coaches." />
     <meta name="twitter:image" content="/crunch-logo.png" />
+
+    <!-- Structured data (basic) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Crunch",
+        "applicationCategory": "HealthApplication",
+        "operatingSystem": "iOS, Android, Web",
+        "description": "AI meal prep & training planner for students, athletes, and coaches.",
+        "url": "https://crunch-asu-landing.vercel.app"
+      }
+    </script>
+
+    <!-- Optional analytics (Plausible). Remove or update domain if needed. -->
+    <script defer data-domain="crunch-asu-landing.vercel.app" src="https://plausible.io/js/script.js"></script>
   </head>
   <body>
+    <!-- Accessible skip link (visible on keyboard focus) -->
+    <a
+      href="#join"
+      style="
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        background: #22c55e;
+        color: #0a0a0a;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-weight: 600;
+      "
+      onfocus="this.style.left='12px'"
+      onblur="this.style.left='-9999px'"
+    >
+      Skip to join form
+    </a>
+
     <div id="root"></div>
-    <!-- Vite will replace this with /assets/index-*.js on build -->
+
+    <!-- Vite will rewrite this to /assets/index-*.js on build -->
     <script type="module" src="/src/main.tsx"></script>
+
+    <noscript>
+      <div style="max-width:680px;margin:24px auto;padding:12px 16px;border:1px solid #262626;border-radius:8px;color:#e5e5e5;background:#0a0a0a;">
+        Crunch needs JavaScript enabled to run. Please enable JavaScript and reload.
+      </div>
+    </noscript>
   </body>
 </html>

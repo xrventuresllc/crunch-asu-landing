@@ -1,19 +1,74 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xgvlpgvd' as const;
-// Your logo in /public
+const FORMSPREE_ENDPOINT: string =
+  (import.meta.env.VITE_FORMSPREE_ENDPOINT as string) ?? 'https://formspree.io/f/xgvlpgvd';
+
+// Assets & profiles
 const LOGO_SRC = '/crunch-logo.png';
-// Your LinkedIn profile
 const LINKEDIN_URL = 'https://www.linkedin.com/in/xuru-ren-crunchfounder';
+const CALENDLY_URL = import.meta.env.VITE_CALENDLY_URL as string | undefined;
+
+// --- Supabase client (safe no-op if envs missing) ---
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabase: SupabaseClient | null =
+  SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
+
+// ------- Campus config (ASU default; override with ?campus=gcu or ?campus=maricopa) -------
+type CampusKey = 'ASU' | 'GCU' | 'MARICOPA';
+type CampusCfg = {
+  label: string;                               // used in hero / CTA
+  color: string;                               // highlight color (hex)
+  emailCheck: (email: string) => boolean;      // student email validator
+  placeholder: string;                         // email placeholder for Students
+  disclaimer: string;                          // footer line
+};
+
+const CAMPUS_MAP: Record<CampusKey, CampusCfg> = {
+  ASU: {
+    label: 'ASU',
+    color: '#FFC627',                               // ASU gold
+    emailCheck: (e) => /@asu\.edu$/i.test(e),       // strict ASU
+    placeholder: 'you@asu.edu',
+    disclaimer:
+      'Independent pilot with the ASU community; not affiliated with or endorsed by ASU.'
+  },
+  GCU: {
+    label: 'GCU',
+    color: '#522398',                               // GCU purple (approx)
+    // allow @gcu.edu and @my.gcu.edu
+    emailCheck: (e) => /@(my\.)?gcu\.edu$/i.test(e),
+    placeholder: 'you@gcu.edu',
+    disclaimer:
+      'Independent pilot with the GCU community; not affiliated with or endorsed by GCU.'
+  },
+  MARICOPA: {
+    label: 'Maricopa CC',
+    color: '#1E88E5',                               // blue accent
+    // strict maricopa.edu per your note
+    emailCheck: (e) => /@maricopa\.edu$/i.test(e),
+    placeholder: 'you@maricopa.edu',
+    disclaimer:
+      'Independent pilot with Maricopa community colleges; not affiliated with or endorsed by any institution.'
+  }
+};
 
 export default function App() {
+  // ----- Campus selection from URL (defaults to ASU) -----
+  const campus = useMemo<CampusKey>(() => {
+    const v = new URLSearchParams(window.location.search).get('campus')?.toUpperCase();
+    if (v === 'GCU') return 'GCU';
+    if (v === 'MARICOPA' || v === 'MCC' || v === 'MARICOPA_CC' || v === 'MARICOPACC') return 'MARICOPA';
+    return 'ASU';
+  }, []);
+  const campusCfg = CAMPUS_MAP[campus];
+
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [role, setRole] = useState<'Student' | 'Coach' | 'Other'>('Student');
   const [coachProgram, setCoachProgram] = useState('');
-
-  // simple image fallback
   const [logoOk, setLogoOk] = useState(true);
 
   // Capture UTM params for basic attribution
@@ -21,7 +76,7 @@ export default function App() {
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+      const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campus'];
       const collected: Record<string, string> = {};
       keys.forEach((k) => {
         const v = params.get(k);
@@ -43,39 +98,89 @@ export default function App() {
     // honeypot - leave empty
     if ((data.get('company') as string)?.length) return;
 
-    // role-based validation
+    // role-based validation (campus-aware)
     const email = (data.get('email') as string) || '';
-    if (role === 'Student' && !/@asu\.edu$/i.test(email)) {
-      setError('Please use your @asu.edu email for the student pilot. Coaches can use any email.');
+    if (role === 'Student' && !campusCfg.emailCheck(email)) {
+      const msg =
+        campus === 'ASU'
+          ? 'Students: please use your @asu.edu email for priority access.'
+          : campus === 'GCU'
+            ? 'Students: please use your @gcu.edu (or @my.gcu.edu) email for priority access.'
+            : 'Students: please use your @maricopa.edu email for priority access.';
+      setError(msg + ' Coaches can use any email.');
       return;
     }
 
-    // Append extras
-    data.append('source', 'asu-landing');
-    data.append('site_version', '2025-09-07');
+    // Pull values for Supabase
+    const name = (data.get('name') as string) || '';
+    const roleVal = (data.get('role') as string) || role;
+    const team = (data.get('team') as string) || coachProgram;
+    const interests = (data.getAll('interests') as string[]) || [];
+
+    // Append extras for Formspree
+    data.append('source', `pilot-${campus.toLowerCase()}`);
+    data.append('campus', campusCfg.label);
+    data.append('site_version', '2025-09-08');
     if (role === 'Coach' && coachProgram.trim()) {
       data.append('coach_program', coachProgram.trim());
     }
     Object.entries(utm).forEach(([k, v]) => data.append(k, v));
 
     setLoading(true);
+
+    let supaOk = false;
+    let fsOk = false;
+
     try {
-      const res = await fetch(FORMSPREE_ENDPOINT, {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: data,
-      });
-      if (res.ok) {
+      // 1) Supabase upsert (dedup via unique index on email_norm)
+      if (supabase) {
+        const { error: supaErr } = await supabase
+          .from('leads_asu')
+          .upsert(
+            [{
+              name,
+              email,
+              role: roleVal,
+              team,
+              interests,
+              utm,
+              site_version: '2025-09-08',
+              source: `pilot-${campus.toLowerCase()}`,
+              user_agent: navigator.userAgent,
+              referer: document.referrer
+            }],
+            { onConflict: 'email_norm', ignoreDuplicates: true }
+          );
+        if (!supaErr) supaOk = true;
+      }
+
+      // 2) Formspree (notifications / backup)
+      try {
+        const res = await fetch(FORMSPREE_ENDPOINT, {
+          method: 'POST',
+          headers: { Accept: 'application/json' },
+          body: data,
+        });
+        if (res.ok) fsOk = true;
+        else {
+          const text = await res.text();
+          try {
+            const j = JSON.parse(text);
+            setError(j?.errors?.[0]?.message || 'Submission failed. Try again.');
+          } catch {
+            setError(text || 'Submission failed. Try again.');
+          }
+        }
+      } catch {
+        // ignore — Supabase may still have succeeded
+      }
+
+      if (supaOk || fsOk) {
+        (window as any).plausible?.('Lead', { props: { campus: campusCfg.label, role: roleVal } });
         setSubmitted(true);
         form.reset();
-      } else {
-        try {
-          const j = await res.json();
-          const msg = j?.errors?.[0]?.message || 'Submission failed. Try again.';
-          setError(msg);
-        } catch {
-          setError('Submission failed. Try again.');
-        }
+      } else if (!error) {
+        setError('Submission failed. Try again.');
       }
     } catch {
       setError('Network error. Try again.');
@@ -107,7 +212,9 @@ export default function App() {
               <div className="h-7 w-7 rounded-md bg-emerald-500" />
             )}
             <span className="font-semibold tracking-tight">Crunch</span>
-            <span className="ml-2 hidden sm:inline-block text-xs text-neutral-400">ASU Pilot</span>
+            <span className="ml-2 hidden sm:inline-block text-xs text-neutral-400">
+              {campusCfg.label} Pilot
+            </span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-neutral-300">
             <a href="#how" className="hover:text-neutral-100">How it works</a>
@@ -131,23 +238,28 @@ export default function App() {
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-neutral-900/60">
         <div className="absolute inset-0 pointer-events-none" aria-hidden>
-          <div className="absolute -top-24 -left-24 h-80 w-80 rounded-full bg-emerald-500/10 blur-3xl" />
+          <div
+            className="absolute -top-24 -left-24 h-80 w-80 rounded-full blur-3xl"
+            style={{ background: `${campusCfg.color}33` }}
+          />
           <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl" />
         </div>
         <div className="mx-auto max-w-6xl px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
           <div>
             <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">
-              AI meal prep & training planner for <span className="text-[#FFC627]">ASU</span>
+              AI meal prep & training planner for{' '}
+              <span style={{ color: campusCfg.color }}>{campusCfg.label}</span>
             </h1>
             <p className="mt-4 text-neutral-300 max-w-xl">
               Crunch helps students, athletes, and coaches plan fast, healthy meals and simple training schedules.
-              Join the ASU pilot to shape the product.
+              Join the {campusCfg.label} pilot to shape the product.
             </p>
             <ul className="mt-6 space-y-2 text-sm text-neutral-300">
               <li>• AI Meal Chat</li>
               <li>• Planner with macro bars</li>
               <li>• Trainer dashboard (v1 during the pilot)</li>
             </ul>
+
             <div className="mt-8 flex items-center gap-3">
               <button
                 onClick={scrollToJoin}
@@ -159,6 +271,12 @@ export default function App() {
                 See how it works
               </a>
             </div>
+
+            {/* Campus switcher */}
+            <div className="mt-6">
+              <CampusSwitcher />
+            </div>
+
             <p className="mt-3 text-xs text-neutral-500">Fall pilot • Limited seats • Weekly feedback loops</p>
             <p className="mt-1 text-xs text-neutral-500">Founded by <span className="font-medium">Xuru Ren</span>.</p>
           </div>
@@ -210,7 +328,7 @@ export default function App() {
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
             {!submitted ? (
               <form onSubmit={handleSubmit} className="space-y-4" aria-live="polite">
-                <h3 className="text-xl font-semibold">Join the ASU pilot</h3>
+                <h3 className="text-xl font-semibold">Join the {campusCfg.label} pilot</h3>
 
                 {/* honeypot input (hidden) */}
                 <input type="text" name="company" className="hidden" tabIndex={-1} autoComplete="off" />
@@ -231,11 +349,18 @@ export default function App() {
                     type="email"
                     className="mt-1 w-full rounded-xl bg-neutral-800/70 px-4 py-3 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
                     name="email"
-                    placeholder={role === 'Student' ? 'you@asu.edu' : 'you@school.edu'}
+                    placeholder={role === 'Student' ? campusCfg.placeholder : 'you@school.edu'}
                     aria-describedby="email-help"
+                    aria-invalid={!!error}
                   />
                   <p id="email-help" className="mt-1 text-xs text-neutral-500">
-                    Students: please use your @asu.edu email for priority access.
+                    {role === 'Student'
+                      ? (campus === 'ASU'
+                          ? 'Students: please use your @asu.edu email for priority access.'
+                          : campus === 'GCU'
+                            ? 'Students: please use your @gcu.edu (or @my.gcu.edu) email for priority access.'
+                            : 'Students: please use your @maricopa.edu email for priority access.')
+                      : 'Coaches: any email is fine.'}
                   </p>
                 </div>
 
@@ -259,10 +384,22 @@ export default function App() {
                     <input
                       className="mt-1 w-full rounded-xl bg-neutral-800/70 px-4 py-3 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
                       name="team"
-                      placeholder="e.g., ASU Track & Field"
+                      placeholder="e.g., Track & Field"
                       value={coachProgram}
                       onChange={(e) => setCoachProgram(e.target.value)}
                     />
+                    {CALENDLY_URL && (
+                      <div className="mt-3">
+                        <a
+                          href={`${CALENDLY_URL}?utm_source=site&utm_medium=join_form&utm_campaign=coach_intro`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-900"
+                        >
+                          Book a 15-min coach intro <span aria-hidden>↗</span>
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -291,12 +428,12 @@ export default function App() {
                   {loading ? 'Sending…' : 'Request access'}
                 </button>
                 <p className="text-xs text-neutral-500">
-                  By submitting you agree to be contacted about the ASU pilot.
+                  By submitting you agree to be contacted about the pilot. We’ll never sell your data.
                 </p>
               </form>
             ) : (
               <div className="text-center py-8" aria-live="polite">
-                <div className="mx-auto h-10 w-10 rounded-full bg-emerald-500/20" />
+                <div className="mx-auto h-10 w-10 rounded-full" style={{ background: `${campusCfg.color}33` }} />
                 <h4 className="mt-3 text-xl font-semibold">Request received</h4>
                 <p className="mt-1 text-neutral-300">
                   Thanks! We’ll email you next steps (from <span className="font-medium">xrventuresllc@gmail.com</span>).
@@ -312,7 +449,8 @@ export default function App() {
                   </a>
                   <button
                     onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                    className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-emerald-400"
+                    className="rounded-lg"
+                    style={{ background: campusCfg.color, color: '#0a0a0a', padding: '0.5rem 1rem', fontWeight: 600, borderRadius: 8 }}
                   >
                     Back to top
                   </button>
@@ -325,14 +463,14 @@ export default function App() {
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
               <h4 className="font-semibold">Why a pilot?</h4>
               <p className="mt-1 text-sm text-neutral-300">
-                We’re building Crunch with the ASU community. Small cohorts let us ship weekly, test meal-prep flows,
-                and tune macro targets for real schedules.
+                We’re building Crunch with the {campusCfg.label} community. Small cohorts let us ship weekly,
+                test meal-prep flows, and tune macro targets for real schedules.
               </p>
             </div>
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
               <h4 className="font-semibold">Coach benefits</h4>
               <p className="mt-1 text-sm text-neutral-300">
-                Assign plans, monitor adherence, schedule check-ins, and get simple reports that don’t require spreadsheets.
+                Assign plans, monitor adherence, schedule check-ins, and get simple reports—without spreadsheets.
               </p>
             </div>
           </div>
@@ -346,7 +484,7 @@ export default function App() {
           {[
             { q: 'Is this live?', a: 'Core features are working (AI Meal Chat, Planner, macro bars). Trainer dashboard v1 ships during the pilot.' },
             { q: 'Who is Crunch for?', a: 'Students, athletes, and coaches who want simple, fast nutrition and training planning.' },
-            { q: 'How do I join the pilot?', a: 'Use the form above; we onboard in small cohorts and prioritize @asu.edu emails.' },
+            { q: 'How do I join the pilot?', a: `Use the form above; we onboard in small cohorts and prioritize ${campusCfg.label} emails for students.` },
             { q: 'How is feedback used?', a: 'We run weekly sprints; your feedback directly shapes features and pricing.' },
           ].map((item) => (
             <div key={item.q} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
@@ -364,7 +502,7 @@ export default function App() {
             onClick={scrollToJoin}
             className="rounded-full bg-emerald-500 px-6 py-3 font-semibold text-neutral-900 shadow-lg shadow-emerald-500/20 hover:bg-emerald-400"
           >
-            Join the ASU pilot
+            Join the {campusCfg.label} pilot
           </button>
         </div>
       )}
@@ -381,19 +519,55 @@ export default function App() {
             <span className="font-semibold">Crunch</span>
             <span className="text-neutral-500">© {new Date().getFullYear()}</span>
           </div>
-          <div className="flex items-center gap-3 text-sm text-neutral-400">
+
+          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 text-sm text-neutral-400 text-center md:text-left">
             <span>
-              Contact:{' '}
+              Contact{' '}
               <a className="underline hover:text-neutral-200" href="mailto:xrventuresllc@gmail.com">
                 xrventuresllc@gmail.com
               </a>{' '}
               • <span className="text-neutral-500">Xuru Ren — Founder</span>
             </span>
-            {/* LinkedIn in footer */}
             <LinkedInLink placement="footer" />
+            <a className="underline hover:text-neutral-200" href="/privacy.html">Privacy</a>
+          </div>
+
+          <div className="text-xs text-neutral-500 text-center md:text-right">
+            {campusCfg.disclaimer}
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function CampusSwitcher() {
+  const options = [
+    { key: 'ASU', label: 'ASU' },
+    { key: 'GCU', label: 'GCU' },
+    { key: 'MARICOPA', label: 'Maricopa CC' },
+  ] as const;
+
+  const current = new URLSearchParams(window.location.search).get('campus')?.toUpperCase() || 'ASU';
+  const setCampus = (c: string) => {
+    const u = new URL(window.location.href);
+    u.searchParams.set('campus', c);
+    window.location.href = u.toString();
+  };
+
+  return (
+    <div className="flex items-center gap-2" aria-label="Choose campus">
+      {options.map(o => (
+        <button
+          key={o.key}
+          onClick={() => setCampus(o.key)}
+          className={`rounded-full px-3 py-1 text-sm border transition ${
+            current === o.key ? 'border-emerald-500 bg-emerald-500/10' : 'border-neutral-800 hover:bg-neutral-900'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }
