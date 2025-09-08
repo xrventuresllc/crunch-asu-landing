@@ -3,19 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Crunch — ASU Pilot</title>
 
-    <link rel="icon" href="/favicon.ico" />
+    <!-- Professional tab title (keep ASU in the hero, not the title) -->
+    <title>Crunch — AI meal prep & training planner</title>
+    <meta name="description" content="AI meal prep & training planner for students, athletes, and coaches." />
+
+    <!-- Favicons: use your logo so there's no heart emoji -->
+    <link rel="icon" href="/crunch-logo.png" type="image/png" />
+    <link rel="shortcut icon" href="/crunch-logo.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Theming -->
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="color-scheme" content="dark light" />
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://crunch-asu-landing.vercel.app/" />
 
     <!-- Open Graph / Twitter -->
-    <meta property="og:title" content="Crunch — ASU Pilot" />
-    <meta property="og:description" content="AI meal prep & training planner for students and coaches." />
-    <meta property="og:image" content="/og.png" />
+    <meta property="og:site_name" content="Crunch" />
+    <meta property="og:title" content="Crunch — AI meal prep & training planner" />
+    <meta property="og:description" content="AI meal prep & training planner for students, athletes, and coaches." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://crunch-asu-landing.vercel.app/" />
+    <!-- Use your logo as a safe default; replace with /og.png later if you add a social card -->
+    <meta property="og:image" content="/crunch-logo.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Crunch — AI meal prep & training planner" />
+    <meta name="twitter:description" content="AI meal prep & training planner for students, athletes, and coaches." />
+    <meta name="twitter:image" content="/crunch-logo.png" />
   </head>
   <body>
     <div id="root"></div>
-    <!-- Vite replaces this with /assets/index-*.js in the prod build -->
+    <!-- Vite will replace this with /assets/index-*.js on build -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
