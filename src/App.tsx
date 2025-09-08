@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xgvlpgvd' as const;
 // Your logo in /public
 const LOGO_SRC = '/crunch-logo.png';
+// Your LinkedIn profile
+const LINKEDIN_URL = 'https://www.linkedin.com/in/xuru-ren-crunchfounder';
 
 export default function App() {
   const [submitted, setSubmitted] = useState(false);
@@ -299,6 +301,11 @@ export default function App() {
                 <p className="mt-1 text-neutral-300">
                   Thanks! We’ll email you next steps (from <span className="font-medium">xrventuresllc@gmail.com</span>).
                 </p>
+
+                {/* LinkedIn nudge after submit */}
+                <div className="mt-4 text-sm text-neutral-400">Follow product updates on LinkedIn</div>
+                <div className="mt-2 flex items-center justify-center"><LinkedInLink placement="success" /></div>
+
                 <div className="mt-6 flex items-center justify-center gap-3">
                   <a href="#faq" className="rounded-lg border border-neutral-800 px-4 py-2 text-sm hover:bg-neutral-900">
                     Read FAQ
@@ -374,12 +381,16 @@ export default function App() {
             <span className="font-semibold">Crunch</span>
             <span className="text-neutral-500">© {new Date().getFullYear()}</span>
           </div>
-          <div className="text-sm text-neutral-400">
-            Contact:{' '}
-            <a className="underline hover:text-neutral-200" href="mailto:xrventuresllc@gmail.com">
-              xrventuresllc@gmail.com
-            </a>{' '}
-            • <span className="text-neutral-500">Xuru Ren — Founder</span>
+          <div className="flex items-center gap-3 text-sm text-neutral-400">
+            <span>
+              Contact:{' '}
+              <a className="underline hover:text-neutral-200" href="mailto:xrventuresllc@gmail.com">
+                xrventuresllc@gmail.com
+              </a>{' '}
+              • <span className="text-neutral-500">Xuru Ren — Founder</span>
+            </span>
+            {/* LinkedIn in footer */}
+            <LinkedInLink placement="footer" />
           </div>
         </div>
       </footer>
@@ -416,5 +427,23 @@ function Card({ title, note }: { title: string; note: string }) {
       <div className="mt-1 text-xs text-neutral-500">{note}</div>
       <div className="mt-3 h-8 rounded-md border border-neutral-800 bg-neutral-900/60" />
     </div>
+  );
+}
+
+function LinkedInLink({ placement = 'footer' }: { placement?: 'footer' | 'success' }) {
+  const url = `${LINKEDIN_URL}?utm_source=site&utm_medium=${placement}&utm_campaign=social_follow`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="LinkedIn"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-900"
+    >
+      {/* LinkedIn icon */}
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+        <path d="M4.98 3.5C4.98 4.88 3.86 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0 8h5v16H0V8zm7.5 0h4.8v2.2h.07c.67-1.2 2.32-2.47 4.78-2.47C21.9 7.73 24 9.7 24 13.4V24h-5v-9c0-2.15-.77-3.6-2.7-3.6-1.47 0-2.35.99-2.73 1.95-.14.34-.18.8-.18 1.27V24H7.5V8z"/>
+      </svg>
+    </a>
   );
 }
