@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+/* -------------------------------------------------
+   Config
+--------------------------------------------------*/
+// Formspree fallback if env not set
 const FORMSPREE_ENDPOINT: string =
   (import.meta.env.VITE_FORMSPREE_ENDPOINT as string) ?? 'https://formspree.io/f/xgvlpgvd';
 
@@ -9,53 +13,56 @@ const LOGO_SRC = '/crunch-logo.png';
 const LINKEDIN_URL = 'https://www.linkedin.com/in/xuru-ren-crunchfounder';
 const CALENDLY_URL = import.meta.env.VITE_CALENDLY_URL as string | undefined;
 
-// --- Supabase client (safe no-op if envs missing) ---
+// Supabase (safe no-op if envs missing)
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 const supabase: SupabaseClient | null =
   SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
-// ------- Campus config (ASU default; override with ?campus=gcu or ?campus=maricopa) -------
+// Campus config (ASU default; override with ?campus=gcu or ?campus=maricopa)
 type CampusKey = 'ASU' | 'GCU' | 'MARICOPA';
 type CampusCfg = {
-  label: string;                               // used in hero / CTA
-  color: string;                               // highlight color (hex)
-  emailCheck: (email: string) => boolean;      // student email validator
-  placeholder: string;                         // email placeholder for Students
-  disclaimer: string;                          // footer line
+  label: string;                 // used in hero / CTA
+  color: string;                 // highlight color (hex)
+  emailCheck: (email: string) => boolean; // student/faculty validator
+  placeholder: string;           // email placeholder for Students/Faculty
+  disclaimer: string;            // footer line
 };
 
 const CAMPUS_MAP: Record<CampusKey, CampusCfg> = {
   ASU: {
     label: 'ASU',
-    color: '#FFC627',                               // ASU gold
-    emailCheck: (e) => /@asu\.edu$/i.test(e),       // strict ASU
+    color: '#FFC627', // ASU gold
+    emailCheck: (e) => /@asu\.edu$/i.test(e),
     placeholder: 'you@asu.edu',
     disclaimer:
-      'Independent pilot with the ASU community; not affiliated with or endorsed by ASU.'
+      'Independent pilot with the ASU community; not affiliated with or endorsed by ASU.',
   },
   GCU: {
     label: 'GCU',
-    color: '#522398',                               // GCU purple (approx)
-    // allow @gcu.edu and @my.gcu.edu
-    emailCheck: (e) => /@(my\.)?gcu\.edu$/i.test(e),
+    color: '#522398', // GCU purple (approx)
+    emailCheck: (e) => /@(my\.)?gcu\.edu$/i.test(e), // @gcu.edu or @my.gcu.edu
     placeholder: 'you@gcu.edu',
     disclaimer:
-      'Independent pilot with the GCU community; not affiliated with or endorsed by GCU.'
+      'Independent pilot with the GCU community; not affiliated with or endorsed by GCU.',
   },
   MARICOPA: {
     label: 'Maricopa CC',
-    color: '#1E88E5',                               // blue accent
-    // strict maricopa.edu per your note
+    color: '#1E88E5',
     emailCheck: (e) => /@maricopa\.edu$/i.test(e),
     placeholder: 'you@maricopa.edu',
     disclaimer:
-      'Independent pilot with Maricopa community colleges; not affiliated with or endorsed by any institution.'
-  }
+      'Independent pilot with Maricopa Community Colleges; not affiliated with or endorsed by any institution.',
+  },
 };
 
+/* -------------------------------------------------
+   App
+--------------------------------------------------*/
+type Role = 'Student' | 'Faculty' | 'Coach' | 'Other';
+
 export default function App() {
-  // ----- Campus selection from URL (defaults to ASU) -----
+  // Campus from URL (defaults to ASU)
   const campus = useMemo<CampusKey>(() => {
     const v = new URLSearchParams(window.location.search).get('campus')?.toUpperCase();
     if (v === 'GCU') return 'GCU';
@@ -64,14 +71,15 @@ export default function App() {
   }, []);
   const campusCfg = CAMPUS_MAP[campus];
 
+  // UI state
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState<'Student' | 'Coach' | 'Other'>('Student');
+  const [role, setRole] = useState<Role>('Student');
   const [coachProgram, setCoachProgram] = useState('');
   const [logoOk, setLogoOk] = useState(true);
 
-  // Capture UTM params for basic attribution
+  // UTM capture
   const [utm, setUtm] = useState<Record<string, string>>({});
   useEffect(() => {
     try {
@@ -95,33 +103,34 @@ export default function App() {
     const form = e.currentTarget;
     const data = new FormData(form);
 
-    // honeypot - leave empty
+    // Honeypot — leave empty
     if ((data.get('company') as string)?.length) return;
 
-    // role-based validation (campus-aware)
+    // Role-based validation (Students + Faculty use campus emails)
     const email = (data.get('email') as string) || '';
-    if (role === 'Student' && !campusCfg.emailCheck(email)) {
+    const needsCampusEmail = role === 'Student' || role === 'Faculty';
+    if (needsCampusEmail && !campusCfg.emailCheck(email)) {
       const msg =
         campus === 'ASU'
-          ? 'Students: please use your @asu.edu email for priority access.'
+          ? 'Please use your @asu.edu email for priority access.'
           : campus === 'GCU'
-            ? 'Students: please use your @gcu.edu (or @my.gcu.edu) email for priority access.'
-            : 'Students: please use your @maricopa.edu email for priority access.';
+          ? 'Please use your @gcu.edu (or @my.gcu.edu) email for priority access.'
+          : 'Please use your @maricopa.edu email for priority access.';
       setError(msg + ' Coaches can use any email.');
       return;
     }
 
-    // Pull values for Supabase
+    // Values for Supabase
     const name = (data.get('name') as string) || '';
-    const roleVal = (data.get('role') as string) || role;
+    const roleVal = ((data.get('role') as Role) || role) as Role;
     const team = (data.get('team') as string) || coachProgram;
     const interests = (data.getAll('interests') as string[]) || [];
 
-    // Append extras for Formspree
+    // Extra fields for Formspree
     data.append('source', `pilot-${campus.toLowerCase()}`);
     data.append('campus', campusCfg.label);
     data.append('site_version', '2025-09-08');
-    if (role === 'Coach' && coachProgram.trim()) {
+    if (roleVal === 'Coach' && coachProgram.trim()) {
       data.append('coach_program', coachProgram.trim());
     }
     Object.entries(utm).forEach(([k, v]) => data.append(k, v));
@@ -137,18 +146,20 @@ export default function App() {
         const { error: supaErr } = await supabase
           .from('leads_asu')
           .upsert(
-            [{
-              name,
-              email,
-              role: roleVal,
-              team,
-              interests,
-              utm,
-              site_version: '2025-09-08',
-              source: `pilot-${campus.toLowerCase()}`,
-              user_agent: navigator.userAgent,
-              referer: document.referrer
-            }],
+            [
+              {
+                name,
+                email,
+                role: roleVal,
+                team,
+                interests,
+                utm,
+                site_version: '2025-09-08',
+                source: `pilot-${campus.toLowerCase()}`,
+                user_agent: navigator.userAgent,
+                referer: document.referrer,
+              },
+            ],
             { onConflict: 'email_norm', ignoreDuplicates: true }
           );
         if (!supaErr) supaOk = true;
@@ -161,8 +172,8 @@ export default function App() {
           headers: { Accept: 'application/json' },
           body: data,
         });
-        if (res.ok) fsOk = true;
-        else {
+        fsOk = res.ok;
+        if (!res.ok) {
           const text = await res.text();
           try {
             const j = JSON.parse(text);
@@ -172,7 +183,7 @@ export default function App() {
           }
         }
       } catch {
-        // ignore — Supabase may still have succeeded
+        // Ignore — Supabase may still have succeeded
       }
 
       if (supaOk || fsOk) {
@@ -193,6 +204,9 @@ export default function App() {
     document.getElementById('join')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  /* -------------------------------------------------
+     UI
+  --------------------------------------------------*/
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-white">
       {/* Header */}
@@ -244,20 +258,24 @@ export default function App() {
           />
           <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl" />
         </div>
+
         <div className="mx-auto max-w-6xl px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
           <div>
             <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">
-              AI meal prep & training planner for{' '}
+              AI meal‑prep & training planner for{' '}
               <span style={{ color: campusCfg.color }}>{campusCfg.label}</span>
             </h1>
+
             <p className="mt-4 text-neutral-300 max-w-xl">
-              Crunch helps students, athletes, and coaches plan fast, healthy meals and simple training schedules.
-              Join the {campusCfg.label} pilot to shape the product.
+              Plan your week in minutes. Crunch turns classes, practices, budget, and dietary
+              needs into a simple plan: macros, batch‑friendly recipes, smart leftovers,
+              a grocery list, and light training structure. Built with the campus community.
             </p>
+
             <ul className="mt-6 space-y-2 text-sm text-neutral-300">
-              <li>• AI Meal Chat</li>
-              <li>• Planner with macro bars</li>
-              <li>• Trainer dashboard (v1 during the pilot)</li>
+              <li>• <b>AI Meal Chat</b> for quick swaps & grocery asks</li>
+              <li>• <b>Planner</b> with live macro bars and grocery list</li>
+              <li>• <b>Coach/Faculty tools</b> (assign plans, adherence view)</li>
             </ul>
 
             <div className="mt-8 flex items-center gap-3">
@@ -310,9 +328,18 @@ export default function App() {
         <h2 className="text-3xl md:text-4xl font-bold">How it works</h2>
         <div className="mt-6 grid md:grid-cols-3 gap-6">
           {[
-            { t: 'Tell Crunch your week', d: 'Classes, training, budget, preferences. We auto-calc your macros.' },
-            { t: 'Get a prep plan', d: 'Batch-friendly recipes, smart leftovers, grocery list, and simple timings.' },
-            { t: 'Track & adapt', d: 'Macro bars update as you log. Coaches see adherence and can nudge.' },
+            {
+              t: 'Tell Crunch your week',
+              d: 'Classes, practices, budget, preferences, schedule constraints. We auto‑calculate your macros.',
+            },
+            {
+              t: 'Get one simple plan',
+              d: 'Batch‑friendly recipes, smart leftovers, grocery list, and easy prep timing—fit to your week.',
+            },
+            {
+              t: 'Track & adapt',
+              d: 'Macro bars update as you log. Swap meals with AI. Coaches/faculty can assign plans and nudge.',
+            },
           ].map((i) => (
             <div key={i.t} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
               <h4 className="font-semibold">{i.t}</h4>
@@ -330,7 +357,7 @@ export default function App() {
               <form onSubmit={handleSubmit} className="space-y-4" aria-live="polite">
                 <h3 className="text-xl font-semibold">Join the {campusCfg.label} pilot</h3>
 
-                {/* honeypot input (hidden) */}
+                {/* Honeypot (hidden) */}
                 <input type="text" name="company" className="hidden" tabIndex={-1} autoComplete="off" />
 
                 <div>
@@ -342,6 +369,7 @@ export default function App() {
                     placeholder="Your name"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm text-neutral-300">Email</label>
                   <input
@@ -349,30 +377,31 @@ export default function App() {
                     type="email"
                     className="mt-1 w-full rounded-xl bg-neutral-800/70 px-4 py-3 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
                     name="email"
-                    placeholder={role === 'Student' ? campusCfg.placeholder : 'you@school.edu'}
+                    placeholder={role === 'Student' || role === 'Faculty' ? campusCfg.placeholder : 'you@school.edu'}
                     aria-describedby="email-help"
                     aria-invalid={!!error}
                   />
                   <p id="email-help" className="mt-1 text-xs text-neutral-500">
-                    {role === 'Student'
-                      ? (campus === 'ASU'
-                          ? 'Students: please use your @asu.edu email for priority access.'
-                          : campus === 'GCU'
-                            ? 'Students: please use your @gcu.edu (or @my.gcu.edu) email for priority access.'
-                            : 'Students: please use your @maricopa.edu email for priority access.')
+                    {role === 'Student' || role === 'Faculty'
+                      ? campus === 'ASU'
+                        ? 'Students/Faculty: please use your @asu.edu email for priority access.'
+                        : campus === 'GCU'
+                        ? 'Students/Faculty: please use your @gcu.edu (or @my.gcu.edu) email.'
+                        : 'Students/Faculty: please use your @maricopa.edu email.'
                       : 'Coaches: any email is fine.'}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-neutral-300">Are you a coach or student?</label>
+                  <label className="block text-sm text-neutral-300">Are you a student, faculty, or coach?</label>
                   <select
                     name="role"
                     className="mt-1 w-full rounded-xl bg-neutral-800/70 px-4 py-3 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
                     value={role}
-                    onChange={(e) => setRole(e.target.value as 'Student' | 'Coach' | 'Other')}
+                    onChange={(e) => setRole(e.target.value as Role)}
                   >
                     <option>Student</option>
+                    <option>Faculty</option>
                     <option>Coach</option>
                     <option>Other</option>
                   </select>
@@ -396,7 +425,7 @@ export default function App() {
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-900"
                         >
-                          Book a 15-min coach intro <span aria-hidden>↗</span>
+                          Book a 15‑min coach intro <span aria-hidden>↗</span>
                         </a>
                       </div>
                     )}
@@ -459,18 +488,19 @@ export default function App() {
             )}
           </div>
 
+          {/* Why / Benefits */}
           <div className="space-y-4">
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
               <h4 className="font-semibold">Why a pilot?</h4>
               <p className="mt-1 text-sm text-neutral-300">
-                We’re building Crunch with the {campusCfg.label} community. Small cohorts let us ship weekly,
-                test meal-prep flows, and tune macro targets for real schedules.
+                We’re building Crunch with the {campusCfg.label} community. Small cohorts help us ship weekly,
+                test real prep flows, and tune macros for busy schedules.
               </p>
             </div>
             <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-              <h4 className="font-semibold">Coach benefits</h4>
+              <h4 className="font-semibold">Coach & Faculty benefits</h4>
               <p className="mt-1 text-sm text-neutral-300">
-                Assign plans, monitor adherence, schedule check-ins, and get simple reports—without spreadsheets.
+                Assign plans, monitor adherence, schedule quick check‑ins, and get simple reports—no spreadsheets.
               </p>
             </div>
           </div>
@@ -482,10 +512,22 @@ export default function App() {
         <h2 className="text-3xl md:text-4xl font-bold">FAQ</h2>
         <div className="mt-6 grid md:grid-cols-2 gap-6">
           {[
-            { q: 'Is this live?', a: 'Core features are working (AI Meal Chat, Planner, macro bars). Trainer dashboard v1 ships during the pilot.' },
-            { q: 'Who is Crunch for?', a: 'Students, athletes, and coaches who want simple, fast nutrition and training planning.' },
-            { q: 'How do I join the pilot?', a: `Use the form above; we onboard in small cohorts and prioritize ${campusCfg.label} emails for students.` },
-            { q: 'How is feedback used?', a: 'We run weekly sprints; your feedback directly shapes features and pricing.' },
+            {
+              q: 'Is this live?',
+              a: 'Core features are working (AI Meal Chat, Planner, macro bars). Coach/Faculty dashboard v1 ships during the pilot.',
+            },
+            {
+              q: 'Who is Crunch for?',
+              a: 'Students, athletes, faculty, and coaches who want simple, fast nutrition and light training planning.',
+            },
+            {
+              q: 'How do I join the pilot?',
+              a: `Use the form above. We onboard in small cohorts and prioritize ${campusCfg.label} emails for Students/Faculty.`,
+            },
+            {
+              q: 'How is feedback used?',
+              a: 'We run weekly sprints; your feedback shapes features, pricing, and the launch plan.',
+            },
           ].map((item) => (
             <div key={item.q} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
               <h4 className="font-semibold">{item.q}</h4>
@@ -541,6 +583,9 @@ export default function App() {
   );
 }
 
+/* -------------------------------------------------
+   Small components
+--------------------------------------------------*/
 function CampusSwitcher() {
   const options = [
     { key: 'ASU', label: 'ASU' },
@@ -557,7 +602,7 @@ function CampusSwitcher() {
 
   return (
     <div className="flex items-center gap-2" aria-label="Choose campus">
-      {options.map(o => (
+      {options.map((o) => (
         <button
           key={o.key}
           onClick={() => setCampus(o.key)}
@@ -616,7 +661,7 @@ function LinkedInLink({ placement = 'footer' }: { placement?: 'footer' | 'succes
     >
       {/* LinkedIn icon */}
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-        <path d="M4.98 3.5C4.98 4.88 3.86 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0 8h5v16H0V8zm7.5 0h4.8v2.2h.07c.67-1.2 2.32-2.47 4.78-2.47C21.9 7.73 24 9.7 24 13.4V24h-5v-9c0-2.15-.77-3.6-2.7-3.6-1.47 0-2.35.99-2.73 1.95-.14.34-.18.8-.18 1.27V24H7.5V8z"/>
+        <path d="M4.98 3.5C4.98 4.88 3.86 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0 8h5v16H0V8zm7.5 0h4.8v2.2h.07c.67-1.2 2.32-2.47 4.78-2.47C21.9 7.73 24 9.7 24 13.4V24h-5v-9c0-2.15-.77-3.6-2.7-3.6-1.47 0-2.35.99-2.73 1.95-.14.34-.18.8-.18 1.27V24H7.5V8z" />
       </svg>
     </a>
   );

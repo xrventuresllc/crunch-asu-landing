@@ -1,5 +1,55 @@
-@import "tailwindcss";
+/* Tailwind layers */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root { color-scheme: dark; }
-html, body, #root { height: 100%; }
-body { @apply bg-neutral-950 text-neutral-100; }
+/* --------- Light base polish (non-invasive) --------- */
+
+:root {
+  /* The app is primarily dark; hint browsers for better rendering */
+  color-scheme: dark;
+  --bg: #0a0a0a;
+  --fg: #e5e5e5;
+  --muted: #9ca3af;  /* neutral-400-ish */
+  --accent: #10b981; /* emerald-500 */
+}
+
+/* Keep scroll feel snappy for anchor jumps (e.g., skip link, Join CTA) */
+html { scroll-behavior: smooth; }
+
+/* Respect users who prefer less motion */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+html, body, #root { min-height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Selection color that matches your emerald accent */
+::selection {
+  background: rgba(16, 185, 129, 0.35);
+  color: #fff;
+}
+
+/* Keep link styling minimal; Tailwind handles hover states in components */
+a { text-decoration: inherit; }
+
+/* Accessible focus ring when keyboard navigating; works with Tailwind rings */
+*:focus-visible {
+  outline: 2px solid #22c55e;   /* emerald-500 */
+  outline-offset: 3px;
+}
+
+/* Reduce tap highlight on iOS for cleaner feel */
+a, button { -webkit-tap-highlight-color: transparent; }

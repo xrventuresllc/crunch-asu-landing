@@ -2,19 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <!-- Tab title (keep campus mention in the hero, not here) -->
     <title>Crunch — AI meal prep &amp; training planner</title>
     <meta
       name="description"
-      content="AI meal prep & training planner for students, athletes, and coaches."
+      content="AI meal prep & training planner for students, athletes, faculty, and coaches."
     />
 
-    <!-- Favicons (use your logo; add /apple-touch-icon.png if available) -->
+    <!-- Favicons -->
     <link rel="icon" href="/crunch-logo.png" type="image/png" />
     <link rel="shortcut icon" href="/crunch-logo.png" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -28,27 +25,28 @@
     <base href="/" />
     <link rel="canonical" href="https://crunch-asu-landing.vercel.app/" />
 
-    <!-- Performance: preconnect to external services used on submit/analytics -->
+    <!-- Performance: preconnect to services used on submit/analytics -->
     <link rel="preconnect" href="https://formspree.io" />
     <link rel="preconnect" href="https://plausible.io" />
 
     <!-- Open Graph / Twitter -->
     <meta property="og:site_name" content="Crunch" />
     <meta property="og:title" content="Crunch — AI meal prep &amp; training planner" />
-    <meta property="og:description" content="AI meal prep & training planner for students, athletes, and coaches." />
+    <meta property="og:description" content="AI meal prep & training planner for students, athletes, faculty, and coaches." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://crunch-asu-landing.vercel.app/" />
     <!-- Replace with /og.png (1200x630) when ready -->
     <meta property="og:image" content="/crunch-logo.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Crunch — AI meal prep & training planner" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Crunch — AI meal prep &amp; training planner" />
-    <meta name="twitter:description" content="AI meal prep & training planner for students, athletes, and coaches." />
+    <meta name="twitter:description" content="AI meal prep & training planner for students, athletes, faculty, and coaches." />
     <meta name="twitter:image" content="/crunch-logo.png" />
 
-    <!-- Structured data (basic) -->
+    <!-- Structured data -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -56,12 +54,19 @@
         "name": "Crunch",
         "applicationCategory": "HealthApplication",
         "operatingSystem": "iOS, Android, Web",
-        "description": "AI meal prep & training planner for students, athletes, and coaches.",
-        "url": "https://crunch-asu-landing.vercel.app"
+        "description": "AI meal prep & training planner for students, athletes, faculty, and coaches.",
+        "url": "https://crunch-asu-landing.vercel.app",
+        "publisher": {
+          "@type": "Organization",
+          "name": "Crunch"
+        },
+        "sameAs": [
+          "https://www.linkedin.com/in/xuru-ren-crunchfounder"
+        ]
       }
     </script>
 
-    <!-- Optional analytics (Plausible). Remove or update domain if needed. -->
+    <!-- Optional analytics (Plausible). Update domain if you add a custom one. -->
     <script defer data-domain="crunch-asu-landing.vercel.app" src="https://plausible.io/js/script.js"></script>
   </head>
   <body>
