@@ -3,13 +3,12 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 /* =======================================================================================
    Crunch — Pre‑launch App (App.tsx)
-   - Adds Rep Meter (rage‑clicker) with daily cap & milestones
-   - Plan Peek gate (+5 reps)
+   - Rep Meter (rage‑clicker) with daily cap & milestones
+   - IMPROVED Plan Preview (“See your first day”) → quick controls + reveal (+5 reps) + CTA
    - Micro‑DM Simulator (+3 reps per run)
-   - Email → (optional) Coach/Trainer flag → success + referral link
-   - Post‑submit 3‑question micro‑quiz (goal, schedule, equipment) updates Supabase
+   - Email form with Coach/Trainer segmentation (separate list)
+   - Post‑submit micro‑quiz (goal, schedule, equipment) stored in Supabase
    - Safe fallbacks for Supabase & Formspree
-   - Tailwind CSS classes retained (dark theme)
    ======================================================================================= */
 
 /* -------------------------------------------------
@@ -234,16 +233,14 @@ export default function App() {
     if (n === 25) return 'Early Wave secured. Verify your email to hold your spot.';
     if (n === 50) return 'Skip‑the‑Line unlocked (pending email). Nice.';
     return '';
-    }
+  }
   async function awardReps(delta: number, reason: string) {
     if (delta <= 0) return;
-    // throttle for button spamming (only for clicker — callers can manage otherwise)
     if (reason === 'rep_click') {
       if (cooldown || capHit) return;
       setCooldown(true);
       setTimeout(() => setCooldown(false), 400 + Math.floor(Math.random() * 200));
     }
-    // daily reset guard
     const today = todayString();
     if (lastRepDayRef.current !== today) {
       lastRepDayRef.current = today;
@@ -261,7 +258,6 @@ export default function App() {
       return next;
     });
 
-    // Log best-effort
     logEventToSupabase(reason, delta);
     track('Rep', { delta, reason });
   }
@@ -291,7 +287,7 @@ export default function App() {
     data.append('free_days', String(FREE_DAYS));
     data.append('reps', String(reps));
     data.append('session_id', sess);
-    if (isCoach) data.append('is_coach', 'true');
+    data.append('is_coach', isCoach ? 'true' : 'false'); // segmentation
     if (myRefCode) data.append('referral_code', myRefCode);
     if (referredBy) data.append('referred_by', referredBy);
     Object.entries(utm).forEach(([k, v]) => data.append(k, v));
@@ -320,7 +316,6 @@ export default function App() {
             user_agent: navigator.userAgent,
             referer: document.referrer,
           };
-          // upsert if your table has a unique index on email or email_norm
           const { error: supaErr } = await supabase
             .from(SUPABASE_TABLE)
             .upsert([payload], { ignoreDuplicates: true });
@@ -357,10 +352,9 @@ export default function App() {
         track('Lead', { source: 'prelaunch', is_coach: isCoach ? 1 : 0 });
         setSubmitted(true);
         setEmailJustSubmitted(email);
-        setInfoMsg('You’re on the list. Check your inbox for a plan preview soon.');
+        setInfoMsg('You’re on the list. We’ll send a personalized Plan Preview at launch.');
         form.reset();
-        setIsCoach(false);
-        // Award a tiny bonus for completing step 1 (optional)
+        // keep isCoach state for convenience
         await awardReps(0, 'email_submit');
       } else if (!localErr) {
         setError('Submission failed. Try again.');
@@ -385,7 +379,6 @@ export default function App() {
     setQuizSaving(true);
 
     try {
-      // basic client validation
       if (!emailJustSubmitted) {
         setQuizSaving(false);
         setQuizSubmitted(true);
@@ -401,15 +394,16 @@ export default function App() {
           goal: quiz.goal || null,
           schedule,
           equipment: quiz.equipment,
+          is_coach: isCoach,
         };
         await supabase.from(SUPABASE_TABLE).upsert([payload], { ignoreDuplicates: false });
-        await logEventToSupabase('quiz_submit', 0, { goal: quiz.goal, schedule, equipment: quiz.equipment });
+        await logEventToSupabase('quiz_submit', 0, { goal: quiz.goal, schedule, equipment: quiz.equipment, is_coach: isCoach });
       }
       setQuizSubmitted(true);
-      setInfoMsg('Thanks — we’ll use this to seed your Plan Peek.');
+      setInfoMsg('Thanks — we’ll use this to seed your Plan Preview.');
       track('Quiz', { step: 'complete' });
     } catch {
-      setQuizSubmitted(true); // Don’t block their flow if it fails
+      setQuizSubmitted(true); // don’t block their flow
     } finally {
       setQuizSaving(false);
     }
@@ -587,12 +581,23 @@ export default function App() {
         </div>
       </section>
 
-      {/* Plan Peek Gate & DM Simulator */}
+      {/* Plan Preview + DM Simulator */}
       <section className="mx-auto max-w-6xl px-4 pb-2 grid lg:grid-cols-2 gap-8 items-start">
         <PlanPeek
+          seedGoal={quiz.goal}
+          seedMinutes={
+            typeof quiz.avgMinutes === 'number'
+              ? quiz.avgMinutes
+              : (quiz.avgMinutes ? Number(quiz.avgMinutes) : undefined)
+          }
+          seedEquipment={quiz.equipment}
           onReveal={() => {
             awardReps(5, 'plan_peek_reveal');
             track('PlanPeek', { action: 'reveal' });
+          }}
+          onJoin={() => {
+            scrollToJoin();
+            track('CTA', { where: 'planpeek_join' });
           }}
         />
 
@@ -681,6 +686,18 @@ export default function App() {
                       if (e.key === 'Enter') track('CTA', { where: 'form_enter' });
                     }}
                   />
+
+                  {/* Coach/Trainer segmentation directly in the form */}
+                  <label className="mt-3 flex items-center gap-2 text-sm text-neutral-300">
+                    <input
+                      type="checkbox"
+                      className="accent-indigo-500"
+                      checked={isCoach}
+                      onChange={(e) => setIsCoach(e.currentTarget.checked)}
+                    />
+                    I’m a coach / trainer (prioritize invite & separate list)
+                  </label>
+
                   <p className="mt-2 text-xs text-neutral-500">
                     No spam. We’ll notify you at launch and include your {FREE_DAYS}-day free period.
                   </p>
@@ -708,7 +725,7 @@ export default function App() {
               </form>
             ) : (
               <div className="text-left" aria-live="polite">
-                <h4 className="text-xl font-semibold">You’re on the list</h4>
+                <h4 className="text-xl font-semibold">You’re on the list{isCoach ? ' (Coach/Trainer)' : ''}</h4>
                 <p className="mt-1 text-neutral-300">{infoMsg}</p>
 
                 {/* Referral */}
@@ -790,7 +807,7 @@ export default function App() {
                       >
                         {quizSaving ? 'Saving…' : 'Send my preferences'}
                       </button>
-                      <p className="text-xs text-neutral-500">We’ll use this to seed your Plan Peek & Weekly Report.</p>
+                      <p className="text-xs text-neutral-500">We’ll use this to seed your Plan Preview & Weekly Report.</p>
                     </div>
                   </form>
                 ) : (
@@ -859,7 +876,7 @@ export default function App() {
             },
             {
               q: 'What about nutrition?',
-              a: 'Snap‑to‑‑Macro (in development) provides quick, approximate daily macros without heavy tracking.',
+              a: 'Snap‑to‑Macro (in development) provides quick, approximate daily macros without heavy tracking.',
             },
           ].map((item) => (
             <div key={item.q} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
@@ -1055,35 +1072,151 @@ function ReferralPanel({ myRefCode }: { myRefCode: string }) {
   );
 }
 
-/* ---------- Plan Peek ---------- */
-function PlanPeek({ onReveal }: { onReveal: () => void }) {
+/* ---------- Plan Preview (“See your first day”) ---------- */
+function PlanPeek({
+  seedGoal,
+  seedMinutes,
+  seedEquipment,
+  onReveal,
+  onJoin,
+}: {
+  seedGoal?: QuizState['goal'] | '';
+  seedMinutes?: number;
+  seedEquipment?: string[];
+  onReveal: () => void;
+  onJoin: () => void;
+}) {
   const [revealed, setRevealed] = useState(false);
+  const [goal, setGoal] = useState<NonNullable<QuizState['goal']>>(seedGoal || 'build');
+  const [minutes, setMinutes] = useState<number>(Math.min(Math.max(seedMinutes || 45, 20), 90));
+  const [equipment, setEquipment] = useState<string[]>(
+    (seedEquipment && seedEquipment.length ? seedEquipment : ['db', 'bodyweight']).slice(0, 4)
+  );
+
+  useEffect(() => { if (seedGoal) setGoal(seedGoal); }, [seedGoal]);
+  useEffect(() => { if (seedMinutes) setMinutes(Math.min(Math.max(seedMinutes, 20), 120)); }, [seedMinutes]);
+  useEffect(() => { if (seedEquipment && seedEquipment.length) setEquipment(seedEquipment.slice(0, 4)); }, [seedEquipment]);
+
+  function toggleEq(k: string) {
+    setEquipment((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  }
+
+  function reveal() {
+    if (revealed) return;
+    setRevealed(true);
+    onReveal();
+  }
+
+  const summary = `≈${minutes}m • ${equipment
+    .map((k) => (k === 'db' ? 'DB' : k[0].toUpperCase() + k.slice(1)))
+    .join(' + ')}`;
+
+  const preview = useMemo(() => generatePreview(goal, minutes, equipment), [goal, minutes, equipment]);
+
   return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-      <h3 className="text-xl font-semibold">See your first day</h3>
+      <h3 className="text-xl font-semibold">Plan Preview — see your first day</h3>
       <p className="mt-1 text-sm text-neutral-300">
-        Built from your goal, time, equipment, and injuries — with science guardrails (SRA spacing, RPE caps, weekly set ceilings).
+        Pick goal, time & equipment; Crunch drafts a safe, effective day with science guardrails (SRA spacing, RPE caps, weekly set ceilings).
       </p>
-      <div className="mt-4 relative rounded-xl overflow-hidden border border-neutral-800">
-        <div className={`h-48 bg-neutral-900 grid place-items-center ${revealed ? '' : 'blur-sm'}`}>
-          <span className="text-neutral-400 text-sm">
-            {revealed
-              ? 'Mon — Push (45m): Bench alt (DB), Row, Split Squat, Core — Ready to start'
-              : 'Weekly plan preview (blurred)'}
-          </span>
-        </div>
-        {!revealed && (
-          <button
-            className="absolute inset-0 grid place-items-center text-white font-semibold"
-            onClick={() => {
-              setRevealed(true);
-              onReveal();
-            }}
+
+      {/* Quick setup controls */}
+      <div className="mt-4 grid md:grid-cols-3 gap-3">
+        <label className="block">
+          <span className="block text-xs text-neutral-400">Goal</span>
+          <select
+            className="mt-1 w-full rounded-xl bg-neutral-800/70 px-3 py-2 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
+            value={goal}
+            onChange={(e) => setGoal(e.currentTarget.value as QuizState['goal'])}
           >
-            <span className="rounded-full bg-black/55 px-4 py-2">Tap to reveal one day (+5 reps)</span>
-          </button>
+            <option value="build">Build muscle</option>
+            <option value="lean">Get lean</option>
+            <option value="recomp">Recomposition</option>
+            <option value="sport">Sport‑specific</option>
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs text-neutral-400">Minutes</span>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {[20, 30, 45, 60].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMinutes(m)}
+                className={`px-3 py-1.5 rounded-lg text-sm border ${
+                  minutes === m
+                    ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
+                    : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
+                }`}
+              >
+                {m}m
+              </button>
+            ))}
+          </div>
+        </label>
+
+        <label className="block">
+          <span className="block text-xs text-neutral-400">Equipment</span>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {['bodyweight', 'db', 'barbell', 'machines', 'bands'].map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => toggleEq(k)}
+                className={`px-3 py-1.5 rounded-lg text-sm border ${
+                  equipment.includes(k)
+                    ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
+                    : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
+                }`}
+              >
+                {k === 'db' ? 'Dumbbells' : k.charAt(0).toUpperCase() + k.slice(1)}
+              </button>
+            ))}
+          </div>
+        </label>
+      </div>
+
+      {/* Preview card */}
+      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/70 p-4">
+        <div className="flex items-center justify-between text-xs text-neutral-400">
+          <span>Preview</span>
+          <span>{summary}</span>
+        </div>
+
+        {!revealed ? (
+          <div className="mt-3 grid place-items-center h-40">
+            <button
+              className="rounded-full bg-black/55 px-4 py-2 text-sm font-semibold border border-neutral-700 hover:bg-black/65"
+              onClick={reveal}
+            >
+              Reveal my day (+5 reps)
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="font-semibold text-white">{preview.title}</div>
+            <ul className="list-disc list-inside text-neutral-300">
+              {preview.lines.map((l, i) => (
+                <li key={i}>{l}</li>
+              ))}
+            </ul>
+
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={onJoin}
+                className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-indigo-400"
+              >
+                Reserve my spot
+              </button>
+              <span className="text-xs text-neutral-500">
+                Illustrative only — your real plan adapts weekly with Pocket Coach & Weekly Report.
+              </span>
+            </div>
+          </div>
         )}
       </div>
+      <p className="mt-2 text-xs text-neutral-500">Change goal/minutes/equipment to re‑shape the preview instantly.</p>
     </div>
   );
 }
@@ -1161,4 +1294,73 @@ function DMSimulator({ onSim }: { onSim: (key: DMKey) => void }) {
       <p className="mt-2 text-xs text-neutral-500">Each simulator run adds +3 reps.</p>
     </div>
   );
+}
+
+/* ---------- Tiny preview generator (illustrative) ---------- */
+function generatePreview(
+  goal: NonNullable<QuizState['goal']>,
+  minutes: number,
+  equipment: string[]
+): { title: string; lines: string[] } {
+  const has = (k: string) => equipment.includes(k);
+
+  if (goal === 'lean') {
+    return {
+      title: `Full‑Body Circuit — ${minutes}m`,
+      lines: [
+        has('db') ? 'DB Complex (Row → Clean → Press) × 5 rounds' : 'Bodyweight Circuit × 5 rounds',
+        'Tempo Squats or Step‑ups × 3 sets',
+        'Core Finisher: Dead Bug → Plank ladder (6–8 min)',
+        'Optional: Easy 8–12 min finisher (bike/row/jog)',
+      ],
+    };
+  }
+
+  if (goal === 'recomp') {
+    return {
+      title: `Upper Focus + Easy Conditioning — ${minutes}m`,
+      lines: [
+        has('db') || has('barbell')
+          ? (has('barbell') ? 'Incline Barbell Bench — 3×6–8 @ RPE7' : 'Incline DB Bench — 3×8–10 @ RPE7')
+          : 'Elevated Push‑ups — 3×AMRAP @ RPE7',
+        has('barbell') || has('db')
+          ? (has('barbell') ? 'Pendlay Row — 3×6–8' : 'DB Row — 3×10/side')
+          : 'Inverted Row — 3×AMRAP',
+        'Lateral Raise + Face‑pull superset — 2–3 sets',
+        'Zone‑2 jog/cycle — 12–20 min easy',
+      ],
+    };
+  }
+
+  if (goal === 'sport') {
+    return {
+      title: `Athlete — Speed & Power (practice‑aware) — ${minutes}m`,
+      lines: [
+        'Warm‑up: skips, A‑march, hip/ankle prep (6–8 min)',
+        'Plyos: pogo → drop jump (10–20 contacts)',
+        'Accel strides: 6×20 m, full walk‑back',
+        'Strength: split‑squat or trap‑bar pattern 2–3×6 (sub DB if needed)',
+        'Micro‑prehab: cuff/ham/ankle circuit',
+      ],
+    };
+  }
+
+  // default: build
+  return {
+    title: `Push (Strength) — ${minutes}m`,
+    lines: [
+      has('barbell')
+        ? 'Barbell Bench — 3×6–8 @ RPE7'
+        : has('db')
+          ? 'DB Bench — 3×8–10 @ RPE7'
+          : 'Push‑ups (elevated if needed) — 3×AMRAP @ RPE7',
+      has('barbell')
+        ? 'Barbell Row — 3×6–8'
+        : has('db')
+          ? 'DB Row — 3×10/side'
+          : 'Inverted Row — 3×AMRAP',
+      has('db') || has('barbell') ? 'Split Squat (DB/BB) — 3×8/leg' : 'Split Squat (BW) — 3×10/leg',
+      'Core: Dead Bug → Side Plank superset — 2–3 rounds',
+    ],
+  };
 }
