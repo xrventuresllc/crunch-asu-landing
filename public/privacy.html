@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>Privacy — Crunch</title>
+  <meta name="color-scheme" content="dark" />
+  <link rel="icon" href="/crunch-logo.png" />
+  <style>
+    :root { color-scheme: dark; --bg:#0a0a0a; --fg:#e5e5e5; --muted:#9ca3af; --brand:#6366f1; --border:#262626; }
+    html,body { height:100%; }
+    body {
+      background:var(--bg); color:var(--fg); margin:0;
+      font: 16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    main { max-width:760px; margin:56px auto; padding:0 16px; }
+    h1 { font-size:28px; margin:0 0 12px; line-height:1.25; }
+    h2 { font-size:20px; margin:22px 0 8px; line-height:1.35; }
+    p, li { margin:12px 0; }
+    ul { padding-left: 18px; }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    small { color: var(--muted); }
+    .card {
+      border:1px solid var(--border);
+      border-radius:12px;
+      background: rgba(23,23,23,0.6);
+      padding:16px;
+    }
+    .muted { color: var(--muted); }
+    .grid { display:grid; gap:12px; }
+    @media (min-width: 720px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="muted">Last updated: <b>2025‑11‑07</b></p>
+
+    <p>We keep this page short and clear. This policy covers the pre‑launch website and waitlist for <b>Crunch</b>.
+       If we change how we handle data, we’ll update this page and the date above.</p>
+
+    <div class="card">
+      <h2>What we collect</h2>
+      <ul>
+        <li><b>Email</b> — required to notify you about Early Access and launch.</li>
+        <li><b>Optional preferences</b> — goal, schedule (days/week & minutes), equipment, and whether you are a coach/trainer.</li>
+        <li><b>Engagement signals</b> — simple counters that help us prioritize invites:
+          Rep total (clicks), Plan Peek reveal, DM simulator runs, and referral attribution.</li>
+        <li><b>Technical basics</b> — a random session ID (stored locally in your browser),
+          your browser’s user agent, approximate timezone, referrer, and UTM parameters if present.</li>
+      </ul>
+      <p class="muted">Note: Your IP address may appear in infrastructure logs handled by our providers
+        for security and reliability. We don’t add IP to your waitlist record.</p>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h2>How we use data</h2>
+        <ul>
+          <li>Notify you about Early Access and launch.</li>
+          <li>Prioritize invite waves (e.g., Reps, referrals, coach/trainer flag).</li>
+          <li>Improve the product and measure interest (aggregate analytics).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>What we don’t do</h2>
+        <ul>
+          <li>We don’t sell your data.</li>
+          <li>We don’t send spam. Expect 1–2 emails for waitlist/launch.</li>
+          <li>We don’t use invasive tracking cookies on this site.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Where your data lives (processors)</h2>
+      <ul>
+        <li><b>Supabase</b> — stores the waitlist and event records (email, preferences, basic engagement signals).</li>
+        <li><b>Formspree</b> — processes the form submission as a backup and for notifications.</li>
+        <li><b>Plausible</b> — privacy‑friendly, cookieless analytics (aggregate traffic only).</li>
+      </ul>
+      <p class="muted">We may add a security challenge (e.g., Cloudflare Turnstile) to curb abuse; if enabled,
+        it may process minimal browser data for bot detection.</p>
+    </div>
+
+    <div class="card">
+      <h2>Local storage & cookies</h2>
+      <ul>
+        <li>We use <b>localStorage</b> to save your Rep count and a random session ID so you don’t lose progress between visits.</li>
+        <li>Plausible analytics is <b>cookieless</b>. We don’t set non‑essential cookies on this site.</li>
+      </ul>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h2>Your choices</h2>
+        <ul>
+          <li><b>Unsubscribe</b> anytime via the link in our emails.</li>
+          <li><b>Delete my data</b>: email <a href="mailto:xrventuresllc@gmail.com">xrventuresllc@gmail.com</a> from the address you used.</li>
+          <li>Update your preferences by replying to any waitlist email or emailing us directly.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>Retention & security</h2>
+        <ul>
+          <li>We retain your waitlist info until you ask us to delete it or until it’s no longer needed.</li>
+          <li>Data is encrypted in transit; our providers also encrypt at rest.</li>
+          <li>Access is limited to the Crunch team for product and support purposes.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>About Snap‑to‑Macro</h2>
+      <p>Snap‑to‑Macro is in development and not active on this website. When released inside the app, it will
+        be an <b>optional</b> feature that estimates daily macros from a photo. We’ll publish feature‑specific details before launch.</p>
+    </div>
+
+    <p>Questions? Contact <a href="mailto:xrventuresllc@gmail.com">xrventuresllc@gmail.com</a>.</p>
+    <p><a href="/" aria-label="Back to home">← Back to Crunch</a></p>
+
+    <p class="muted">Crunch is not medical advice. If you’re new to training or injured, please consult a professional.</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# public/robots.txt
+User-agent: *
+Disallow: /
+# Remove the Disallow rule when you are ready to be indexed.

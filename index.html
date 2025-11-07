@@ -7,11 +7,11 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
 
-    <!-- Title keeps product clear; campus mention handled in hero -->
-    <title>Crunch — Camera‑first AI meal prep (ASU Pilot)</title>
+    <!-- Official pre-launch -->
+    <title>Crunch — Train first. A pocket personal coach you can text.</title>
     <meta
       name="description"
-      content="Snap meals to estimate macros and build a personal cookbook. Leftovers mode, share‑ready story cards, and one planner for meals + training. Optional coach tools."
+      content="With one tap, Crunch builds workouts around your goals, time, equipment, and injuries. Text the Pocket Coach to adjust any session. Weekly Reports learn and tune your plan. Snap‑to‑Macro is in development. Join the waitlist for free early access."
     />
 
     <!-- Favicons -->
@@ -20,13 +20,15 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Theming -->
-    <meta name="theme-color" content="#16A34A" />
+    <meta name="theme-color" content="#4F46E5" /> <!-- indigo-600 -->
     <meta name="color-scheme" content="dark light" />
     <meta name="format-detection" content="telephone=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
 
-    <!-- Base & canonical -->
+    <!-- Base & canonical (replace with your live domain when ready) -->
     <base href="/" />
-    <link rel="canonical" href="https://crunch-asu-landing.vercel.app/" />
+    <!-- Optional: set your canonical to the production origin -->
+    <!-- <link rel="canonical" href="https://YOUR-DOMAIN/" /> -->
 
     <!-- Performance: preconnect to services used on submit/analytics -->
     <link rel="preconnect" href="https://formspree.io" />
@@ -36,19 +38,20 @@
 
     <!-- Open Graph / Twitter -->
     <meta property="og:site_name" content="Crunch" />
-    <meta property="og:title" content="Crunch — Camera‑first AI meal prep (ASU Pilot)" />
-    <meta property="og:description" content="Snap meals to estimate macros and build a personal cookbook. Leftovers mode, share‑ready story cards, and one planner for meals + training." />
+    <meta property="og:title" content="Crunch — Train first. A pocket personal coach you can text." />
+    <meta property="og:description" content="One tap builds workouts around your goals, time, equipment, and injuries. Text the Pocket Coach to adjust any session. Weekly Reports learn and tune your plan. Join the waitlist for free early access." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://crunch-asu-landing.vercel.app/" />
+    <!-- If you have a final URL, set it here -->
+    <!-- <meta property="og:url" content="https://YOUR-DOMAIN/" /> -->
     <!-- Replace with /og.png (1200x630) when ready -->
     <meta property="og:image" content="/crunch-logo.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Crunch — Camera‑first AI meal prep" />
+    <meta property="og:image:alt" content="Crunch — Train first. A pocket personal coach you can text." />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Crunch — Camera‑first AI meal prep (ASU Pilot)" />
-    <meta name="twitter:description" content="Snap meals to estimate macros and build a personal cookbook. Leftovers mode, share‑ready story cards, and one planner for meals + training." />
+    <meta name="twitter:title" content="Crunch — Train first. A pocket personal coach you can text." />
+    <meta name="twitter:description" content="One tap builds workouts around your goals, time, equipment, and injuries. Text the Pocket Coach to adjust any session. Weekly Reports learn and tune your plan." />
     <meta name="twitter:image" content="/crunch-logo.png" />
 
     <!-- Structured data -->
@@ -57,10 +60,10 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Crunch",
-        "applicationCategory": "HealthApplication",
+        "applicationCategory": "HealthAndFitnessApplication",
         "operatingSystem": "iOS, Android, Web",
-        "description": "Camera-first AI meal prep & training planner. Snap meals, estimate macros, and build a personal cookbook with share-ready cards.",
-        "url": "https://crunch-asu-landing.vercel.app",
+        "description": "Training-first coach with one-tap plans built around your goals, Pocket Coach chat adjustments, and Weekly Reports that tune your plan. Snap-to-Macro is in development.",
+        "url": "/",
         "publisher": {
           "@type": "Organization",
           "name": "Crunch"
@@ -71,8 +74,19 @@
       }
     </script>
 
-    <!-- Optional analytics (Plausible). Update domain if you add a custom one. -->
-    <script defer data-domain="crunch-asu-landing.vercel.app" src="https://plausible.io/js/script.js"></script>
+    <!-- Analytics (Plausible) — dynamic loader uses current hostname) -->
+    <script>
+      (function(d) {
+        var s = d.createElement('script');
+        s.defer = true;
+        s.src = 'https://plausible.io/js/script.js';
+        s.setAttribute('data-domain', location.hostname); // change to your prod domain if you prefer
+        d.head.appendChild(s);
+      })(document);
+    </script>
+
+    <!-- Optional: font preloads (add if you host custom fonts) -->
+    <!-- <link rel="preload" href="/fonts/YourFont.woff2" as="font" type="font/woff2" crossorigin> -->
   </head>
   <body>
     <!-- Accessible skip link (visible on keyboard focus) -->
@@ -82,7 +96,7 @@
         position: absolute;
         left: -9999px;
         top: 0;
-        background: #22c55e;
+        background: #6366f1; /* indigo-500 */
         color: #0a0a0a;
         padding: 6px 10px;
         border-radius: 8px;

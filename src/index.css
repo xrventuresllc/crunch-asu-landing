@@ -8,13 +8,18 @@
 :root {
   /* The app is primarily dark; hint browsers for better rendering */
   color-scheme: dark;
+
+  /* Core palette */
   --bg: #0a0a0a;
   --fg: #e5e5e5;
-  --muted: #9ca3af;  /* neutral-400-ish */
-  --accent: #10b981; /* emerald-500 */
+  --muted: #9ca3af;         /* neutral-400-ish */
+
+  /* Accents (indigo primary; warm secondary available if needed) */
+  --accent: #6366f1;        /* indigo-500 */
+  --accent-warm: #f97316;   /* orange-500 */
 }
 
-/* Keep scroll feel snappy for anchor jumps (e.g., skip link, Join CTA) */
+/* Smooth anchors (e.g., header CTA → join form) */
 html { scroll-behavior: smooth; }
 
 /* Respect users who prefer less motion */
@@ -24,6 +29,7 @@ html { scroll-behavior: smooth; }
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -36,9 +42,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Selection color that matches your emerald accent */
+/* Selection color that matches your indigo accent */
 ::selection {
-  background: rgba(16, 185, 129, 0.35);
+  background: rgba(99, 102, 241, 0.35); /* indigo-500 @ 35% */
   color: #fff;
 }
 
@@ -47,9 +53,11 @@ a { text-decoration: inherit; }
 
 /* Accessible focus ring when keyboard navigating; works with Tailwind rings */
 *:focus-visible {
-  outline: 2px solid #22c55e;   /* emerald-500 */
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
-/* Reduce tap highlight on iOS for cleaner feel */
-a, button { -webkit-tap-highlight-color: transparent; }
+/* Prevent iOS font-size adjustments on rotation */
+html {
+  -webkit-text-size-adjust: 100%;
+}
