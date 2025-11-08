@@ -9,6 +9,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
    - Email form with Coach/Trainer segmentation (separate list)
    - Post‑submit micro‑quiz (goal, schedule, equipment) stored in Supabase
    - Safe fallbacks for Supabase & Formspree
+   - Stability: safe email input handler + deferred form.reset()
    ======================================================================================= */
 
 /* -------------------------------------------------
@@ -354,7 +355,10 @@ export default function App() {
         setSubmitted(true);
         setEmailJustSubmitted(email);
         setInfoMsg('You’re on the list. We’ll send a personalized preview at launch.');
-        form.reset();
+        // Defer the reset to avoid race with unmount / input handlers
+        setTimeout(() => {
+          try { form.reset(); } catch { /* ignore */ }
+        }, 0);
         await awardReps(0, 'email_submit');
       } else if (!localErr) {
         setError('Submission failed. Try again.');
@@ -669,22 +673,20 @@ export default function App() {
                     type="email"
                     inputMode="email"
                     autoComplete="email"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className="mt-1 w-full rounded-xl bg-neutral-800/70 px-4 py-3 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
                     name="email"
                     placeholder="you@email.com"
                     aria-invalid={!!error}
                     onInput={(e) => {
+                      // Lowercase only; never manipulate caret (prevents rare setSelectionRange crashes)
                       try {
                         const el = e.currentTarget as HTMLInputElement;
-                        const pos = el.selectionStart ?? null;
                         const lower = el.value.toLowerCase();
                         if (el.value !== lower) el.value = lower;
-                        if (pos !== null && typeof el.setSelectionRange === 'function') {
-                          el.setSelectionRange(pos, pos);
-                        }
-                      } catch {
-                        // Some browsers can throw here; ignore safely so UI doesn't crash.
-                      }
+                      } catch { /* ignore */ }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') track('CTA', { where: 'form_enter' });
