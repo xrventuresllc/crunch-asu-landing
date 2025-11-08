@@ -674,10 +674,17 @@ export default function App() {
                     placeholder="you@email.com"
                     aria-invalid={!!error}
                     onInput={(e) => {
-                      const el = e.currentTarget as HTMLInputElement;
-                      const pos = el.selectionStart;
-                      el.value = el.value.toLowerCase();
-                      if (pos !== null) el.setSelectionRange(pos, pos);
+                      try {
+                        const el = e.currentTarget as HTMLInputElement;
+                        const pos = el.selectionStart ?? null;
+                        const lower = el.value.toLowerCase();
+                        if (el.value !== lower) el.value = lower;
+                        if (pos !== null && typeof el.setSelectionRange === 'function') {
+                          el.setSelectionRange(pos, pos);
+                        }
+                      } catch {
+                        // Some browsers can throw here; ignore safely so UI doesn't crash.
+                      }
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') track('CTA', { where: 'form_enter' });
@@ -1087,7 +1094,7 @@ function WeekOneGlance({
     (seedEquipment && seedEquipment.length ? seedEquipment : ['bodyweight', 'db']).slice(0, 4)
   );
 
-  useEffect(() => { if (seedGoal) setGoal(seedGoal); }, [seedGoal]);
+  useEffect(() => { if (seedGoal) setGoal(seedGoal as NonNullable<QuizState['goal']>); }, [seedGoal]);
   useEffect(() => { if (seedMinutes) setMinutes(Math.min(Math.max(seedMinutes, 20), 120)); }, [seedMinutes]);
   useEffect(() => { if (seedEquipment && seedEquipment.length) setEquipment(seedEquipment.slice(0, 4)); }, [seedEquipment]);
 
