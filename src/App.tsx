@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
@@ -9,7 +10,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
    - Email form with Coach/Trainer segmentation (separate list)
    - Post‑submit micro‑quiz (goal, schedule, equipment) stored in Supabase
    - Safe fallbacks for Supabase & Formspree
-   - Stability: safe email input (no caret fiddling) + deferred form.reset()
+   - Stability: safe email input handler + deferred form.reset()
    ======================================================================================= */
 
 /* -------------------------------------------------
@@ -668,7 +669,6 @@ export default function App() {
 
                 <div>
                   <label className="block text-sm text-neutral-300">Email</label>
-                  {/* SAFE EMAIL INPUT — no caret/selection manipulation */}
                   <input
                     required
                     type="email"
@@ -681,6 +681,17 @@ export default function App() {
                     name="email"
                     placeholder="you@email.com"
                     aria-invalid={!!error}
+                    onInput={(e) => {
+                      // Lowercase only; never manipulate caret (prevents rare setSelectionRange crashes)
+                      try {
+                        const el = e.currentTarget as HTMLInputElement;
+                        const lower = el.value.toLowerCase();
+                        if (el.value !== lower) el.value = lower;
+                      } catch { /* ignore */ }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') track('CTA', { where: 'form_enter' });
+                    }}
                   />
 
                   {/* Coach/Trainer segmentation directly in the form */}
