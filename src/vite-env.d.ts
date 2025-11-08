@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 
 /**
- * Type your Vite env vars so typos are caught at build time.
- * Marked optional because the app provides safe fallbacks.
+ * Extend Vite's env typing so TS gives autocompletion and catches typos.
+ * These are optional because your app has runtime fallbacks.
  */
 interface ImportMetaEnv {
   readonly VITE_FORMSPREE_ENDPOINT?: string;
@@ -14,6 +14,12 @@ interface ImportMetaEnv {
   readonly VITE_REP_CAP?: string;
 }
 
+/** Keep Vite built‑ins on env as well. */
 interface ImportMeta {
-  readonly env: ImportMetaEnv;
+  readonly env: ImportMetaEnv & {
+    readonly BASE_URL: string;
+    readonly MODE: string;
+    readonly DEV: boolean;
+    readonly PROD: boolean;
+  };
 }
