@@ -1,1292 +1,1812 @@
-import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+// src/App.tsx
+import React, { useEffect, useState, type FormEvent } from 'react';
+import WeekOneGlance from './WeekOneGlance';
+import DMSimulator from './DMSimulator';
+import { supabase } from './supabaseClient';
 
-/* =======================================================================================
-   Crunch — Pre‑launch App (App.tsx)
-   - Rep Meter (rage‑clicker) with daily cap & milestones
-   - NEW: Week‑1 Glance panel (replaces detailed "See your first day")
-   - Micro‑DM Simulator (+3 reps per run)
-   - Email form with Coach/Trainer segmentation (separate list)
-   - Post‑submit micro‑quiz (goal, schedule, equipment) stored in Supabase
-   - Safe fallbacks for Supabase & Formspree
-   - Stability: safe email input handler + deferred form.reset()
-   ======================================================================================= */
+type ScrollStepId = 'onboard' | 'train' | 'dm' | 'report';
+type CoachSize = 'solo' | 'micro' | 'team';
 
-/* -------------------------------------------------
-   Types & Globals
---------------------------------------------------*/
-declare global {
-  interface Window {
-    plausible?: (event: string, options?: { props?: Record<string, any> }) => void;
-  }
-}
+type BandTone = 'default' | 'soft' | 'dark';
 
-type QuizState = {
-  goal: 'build' | 'lean' | 'recomp' | 'sport' | '';
-  daysPerWeek: number | '';
-  avgMinutes: number | '';
-  equipment: string[];
-};
+const SITE_VERSION = 'coach-landing-v2-apple-bands';
 
-type DMKey = 'busy' | 'knee' | 'hotel';
+function useScrollSteps(stepIds: ScrollStepId[]): ScrollStepId {
+  const [activeId, setActiveId] = useState<ScrollStepId>(stepIds[0] ?? 'onboard');
 
-/* -------------------------------------------------
-   Config
---------------------------------------------------*/
-// Formspree endpoint (fallback if env not set)
-const FORMSPREE_ENDPOINT: string =
-  (import.meta.env.VITE_FORMSPREE_ENDPOINT as string) ?? 'https://formspree.io/f/xgvlpgvd';
-
-// Assets & profiles
-const LOGO_SRC = '/crunch-logo.png';
-const LINKEDIN_URL = 'https://www.linkedin.com/in/xuru-ren-crunchfounder';
-
-// Site/version tag for analytics/debug
-const SITE_VERSION = '2025-11-07-prelaunch';
-const FREE_DAYS = parseInt((import.meta.env.VITE_FREE_DAYS as string) || '30', 10);
-
-// Reps / Gamification
-// ⬇️ default fallback moved to 1000 (still respects VITE_REP_CAP if set)
-const REP_CAP = parseInt((import.meta.env.VITE_REP_CAP as string) || '1000', 10);
-const REP_MILESTONES = [10, 25, 50];
-
-// Supabase (safe no-op if envs missing)
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-const SUPABASE_TABLE = (import.meta.env.VITE_SUPABASE_TABLE as string) || 'leads_prelaunch';
-const SUPABASE_EVENTS_TABLE =
-  (import.meta.env.VITE_SUPABASE_EVENTS_TABLE as string) || 'leads_prelaunch_events';
-const supabase: SupabaseClient | null =
-  SUPABASE_URL && SUPABASE_ANON ? createClient(SUPABASE_URL, SUPABASE_ANON) : null;
-
-/* -------------------------------------------------
-   Helpers
---------------------------------------------------*/
-function track(event: string, props?: Record<string, any>) {
-  window.plausible?.(event, { props });
-}
-
-function getOrMakeSession(): string {
-  try {
-    const k = 'cr_sess';
-    let s = localStorage.getItem(k);
-    if (!s) {
-      s = crypto.randomUUID();
-      localStorage.setItem(k, s);
-    }
-    return s;
-  } catch {
-    return 'anon';
-  }
-}
-function todayString() {
-  return new Date().toDateString();
-}
-function getReferralFromURL(): string | null {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
-    return ref && ref.trim().length ? ref.trim() : null;
-  } catch {
-    return null;
-  }
-}
-function getOrMakeMyReferralCode(): string {
-  try {
-    const k = 'cr_my_ref_code';
-    let c = localStorage.getItem(k);
-    if (!c) {
-      c = crypto.randomUUID().slice(0, 8).replace(/-/g, '').toUpperCase();
-      localStorage.setItem(k, c);
-    }
-    return c;
-  } catch {
-    return 'REF-CODE';
-  }
-}
-function parseIntSafe(v: string | null): number | null {
-  if (!v) return null;
-  const n = parseInt(v, 10);
-  return Number.isFinite(n) ? n : null;
-}
-
-/* -------------------------------------------------
-   App
---------------------------------------------------*/
-export default function App() {
-  // Title
   useEffect(() => {
-    document.title = 'Crunch — Train first. A pocket personal coach you can text.';
-  }, []);
-
-  // UI state
-  const [submitted, setSubmitted] = useState(false);
-  const [emailJustSubmitted, setEmailJustSubmitted] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [isCoach, setIsCoach] = useState(false);
-  const [logoOk, setLogoOk] = useState(true);
-  const [infoMsg, setInfoMsg] = useState<string>('');
-  const [myRefCode, setMyRefCode] = useState<string>('');
-  const [referredBy, setReferredBy] = useState<string | null>(null);
-
-  // Reps (rage‑clicker)
-  const [reps, setReps] = useState<number>(0);
-  const [capHit, setCapHit] = useState<boolean>(false);
-  const [milestoneText, setMilestoneText] = useState<string>('');
-  const [cooldown, setCooldown] = useState<boolean>(false);
-
-  // Session
-  const sess = useMemo(() => getOrMakeSession(), []);
-  const lastRepDayRef = useRef<string>('');
-
-  // UTM capture
-  const [utm, setUtm] = useState<Record<string, string>>({});
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ref'];
-      const collected: Record<string, string> = {};
-      keys.forEach((k) => {
-        const v = params.get(k);
-        if (v) collected[k] = v;
-      });
-      setUtm(collected);
-    } catch {
-      /* noop */
-    }
-  }, []);
-
-  // Referral (inbound + mint mine)
-  useEffect(() => {
-    setReferredBy(getReferralFromURL());
-    setMyRefCode(getOrMakeMyReferralCode());
-  }, []);
-
-  // Reps: init & daily reset
-  useEffect(() => {
-    try {
-      const DAY_K = 'cr_rep_day';
-      const REP_K = 'cr_reps';
-      const today = todayString();
-      const last = localStorage.getItem(DAY_K);
-      if (last !== today) {
-        localStorage.setItem(DAY_K, today);
-        localStorage.setItem(REP_K, '0');
-      }
-      lastRepDayRef.current = today;
-      const v = parseInt(localStorage.getItem(REP_K) || '0', 10);
-      setReps(Number.isFinite(v) ? v : 0);
-      setCapHit(v >= REP_CAP);
-    } catch {
-      setReps(0);
-    }
-  }, []);
-
-  // Reps: persist
-  useEffect(() => {
-    try {
-      localStorage.setItem('cr_reps', String(reps));
-      if (reps >= REP_CAP) setCapHit(true);
-    } catch {
-      /* noop */
-    }
-  }, [reps]);
-
-  // Email micro-quiz
-  const [quiz, setQuiz] = useState<QuizState>({
-    goal: '',
-    daysPerWeek: '',
-    avgMinutes: '',
-    equipment: [],
-  });
-  const [quizSubmitted, setQuizSubmitted] = useState<boolean>(false);
-  const [quizSaving, setQuizSaving] = useState<boolean>(false);
-
-  /* -------------------------------------------------
-     Supabase logging helpers (best-effort)
-  --------------------------------------------------*/
-  async function logEventToSupabase(evt: string, repsDelta = 0, meta?: Record<string, any>) {
-    if (!supabase) return;
-    try {
-      await supabase.from(SUPABASE_EVENTS_TABLE).insert([
-        {
-          session_id: sess,
-          evt,
-          reps_delta: repsDelta,
-          email: emailJustSubmitted ?? null,
-          ip: null,
-          ua: navigator.userAgent,
-          tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          meta: meta ?? null,
-          site_version: SITE_VERSION,
-        },
-      ]);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  /* -------------------------------------------------
-     Rep mechanics
-  --------------------------------------------------*/
-  function milestoneLine(n: number): string {
-    if (n === 10) return 'Badge unlocked: Rep Rookie. Keep going → Early Wave at 25.';
-    if (n === 25) return 'Early Wave secured. Verify your email to hold your spot.';
-    if (n === 50) return 'Skip‑the‑Line unlocked (pending email). Nice.';
-    return '';
-  }
-  async function awardReps(delta: number, reason: string) {
-    if (delta <= 0) return;
-    if (reason === 'rep_click') {
-      if (cooldown || capHit) return;
-      setCooldown(true);
-      setTimeout(() => setCooldown(false), 400 + Math.floor(Math.random() * 200));
-    }
-    const today = todayString();
-    if (lastRepDayRef.current !== today) {
-      lastRepDayRef.current = today;
-      setReps(0);
-      setCapHit(false);
-    }
-
-    setReps((prev) => {
-      const next = Math.min(REP_CAP, prev + delta);
-      if (REP_MILESTONES.includes(next)) {
-        const m = milestoneLine(next);
-        setMilestoneText(m);
-        setTimeout(() => setMilestoneText(''), 5000);
-      }
-      return next;
-    });
-
-    logEventToSupabase(reason, delta);
-    track('Rep', { delta, reason });
-  }
-
-  /* -------------------------------------------------
-     Form submit
-  --------------------------------------------------*/
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-
-    const form = e.currentTarget;
-    const data = new FormData(form);
-
-    // Honeypot — leave empty
-    if ((data.get('company') as string)?.length) return;
-
-    const email = (data.get('email') as string)?.trim().toLowerCase() || '';
-    if (!email) {
-      setError('Please enter your email.');
+    if (!stepIds.length) return;
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
       return;
     }
 
-    // Extra fields for Formspree
-    data.append('source', 'prelaunch');
-    data.append('site_version', SITE_VERSION);
-    data.append('free_days', String(FREE_DAYS));
-    data.append('reps', String(reps));
-    data.append('session_id', sess);
-    data.append('is_coach', isCoach ? 'true' : 'false'); // segmentation
-    if (myRefCode) data.append('referral_code', myRefCode);
-    if (referredBy) data.append('referred_by', referredBy);
-    Object.entries(utm).forEach(([k, v]) => data.append(k, v));
-
-    setLoading(true);
-
-    let supaOk = false;
-    let fsOk = false;
-    let localErr: string | null = null;
-
-    try {
-      // 1) Supabase logging (optional)
-      if (supabase) {
-        try {
-          const payload: Record<string, any> = {
-            email,
-            is_coach: isCoach,
-            utm,
-            reps,
-            referral_code: myRefCode,
-            referred_by: referredBy,
-            session_id: sess,
-            site_version: SITE_VERSION,
-            source: 'prelaunch',
-            free_days: FREE_DAYS,
-            user_agent: navigator.userAgent,
-            referer: document.referrer,
-          };
-          const { error: supaErr } = await supabase
-            .from(SUPABASE_TABLE)
-            .upsert([payload], { ignoreDuplicates: true });
-          if (!supaErr) supaOk = true;
-        } catch {
-          /* ignore Supabase errors so the form still works */
-        }
-      }
-
-      // 2) Formspree (notifications / backup)
-      try {
-        const res = await fetch(FORMSPREE_ENDPOINT, {
-          method: 'POST',
-          headers: { Accept: 'application/json' },
-          body: data,
-        });
-        fsOk = res.ok;
-        if (!res.ok) {
-          const text = await res.text();
-          try {
-            const j = JSON.parse(text);
-            localErr = j?.errors?.[0]?.message || 'Submission failed. Try again.';
-            setError(localErr);
-          } catch {
-            localErr = text || 'Submission failed. Try again.';
-            setError(localErr);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const el = entry.target as HTMLElement;
+            const id = el.dataset.stepId as ScrollStepId | undefined;
+            if (id) setActiveId(id);
           }
         }
-      } catch {
-        // Ignore — Supabase may still have succeeded
+      },
+      {
+        rootMargin: '-45% 0px -45% 0px',
+        threshold: 0.3,
       }
+    );
 
-      if (supaOk || fsOk) {
-        track('Lead', { source: 'prelaunch', is_coach: isCoach ? 1 : 0 });
-        setSubmitted(true);
-        setEmailJustSubmitted(email);
-        setInfoMsg('You’re on the list. We’ll send a personalized preview at launch.');
-        // Defer the reset to avoid race with unmount / input handlers
-        setTimeout(() => {
-          try { form.reset(); } catch { /* ignore */ }
-        }, 0);
-        await awardReps(0, 'email_submit');
-      } else if (!localErr) {
-        setError('Submission failed. Try again.');
-        track('FormError', { step: 'submit', reason: 'unknown' });
-      } else {
-        track('FormError', { step: 'submit', reason: localErr });
-      }
-    } catch {
-      setError('Network error. Try again.');
-      track('FormError', { step: 'submit', reason: 'network' });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  /* -------------------------------------------------
-     Micro‑Quiz submit (best-effort)
-  --------------------------------------------------*/
-  async function handleQuizSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (quizSubmitted) return;
-    setQuizSaving(true);
-
-    try {
-      if (!emailJustSubmitted) {
-        setQuizSaving(false);
-        setQuizSubmitted(true);
-        return;
-      }
-      if (supabase) {
-        const schedule = {
-          days_per_week: quiz.daysPerWeek || null,
-          avg_minutes: quiz.avgMinutes || null,
-        };
-        const payload: Record<string, any> = {
-          email: emailJustSubmitted,
-          goal: quiz.goal || null,
-          schedule,
-          equipment: quiz.equipment,
-          is_coach: isCoach,
-        };
-        await supabase.from(SUPABASE_TABLE).upsert([payload], { ignoreDuplicates: false });
-        await logEventToSupabase('quiz_submit', 0, {
-          goal: quiz.goal,
-          schedule,
-          equipment: quiz.equipment,
-          is_coach: isCoach,
-        });
-      }
-      setQuizSubmitted(true);
-      setInfoMsg('Thanks — we’ll use this to seed your preview.');
-      track('Quiz', { step: 'complete' });
-    } catch {
-      setQuizSubmitted(true);
-    } finally {
-      setQuizSaving(false);
-    }
-  }
-
-  function toggleEquipment(key: string) {
-    setQuiz((q) => {
-      const has = q.equipment.includes(key);
-      return { ...q, equipment: has ? q.equipment.filter((k) => k !== key) : [...q.equipment, key] };
+    stepIds.forEach((id) => {
+      const el = document.querySelector<HTMLElement>(`[data-step-id="${id}"]`);
+      if (el) observer.observe(el);
     });
-  }
 
-  function scrollToJoin() {
-    document.getElementById('join')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
+    return () => observer.disconnect();
+  }, [stepIds.join('|')]);
 
-  /* -------------------------------------------------
-     UI
-  --------------------------------------------------*/
+  return activeId;
+}
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('matchMedia' in window)) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mq.matches);
+    const handler = (event: MediaQueryListEvent) => setReduced(event.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  return reduced;
+}
+
+const deviceShellClass =
+  'relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-b from-neutral-900/80 to-black/95 shadow-[0_30px_90px_rgba(0,0,0,0.45)]';
+
+const App: React.FC = () => {
+  const [coachSize, setCoachSize] = useState<CoachSize>('solo');
+
+  useEffect(() => {
+    document.title = 'Lungeable — Adaptive programming OS for remote strength coaches';
+  }, []);
+
+  const scrollToJoin = () => {
+    const el = document.getElementById('join');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-950 text-white">
-      {/* Header */}
-      <header className="sticky top-0 z-40 backdrop-blur border-b border-neutral-800/60 bg-neutral-950/70">
-        <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {logoOk ? (
-              <img
-                src={LOGO_SRC}
-                alt="Crunch logo"
-                className="h-7 w-7 rounded-md object-contain"
-                loading="eager"
-                decoding="async"
-                fetchPriority="high"
-                onError={() => setLogoOk(false)}
-              />
-            ) : (
-              <div className="h-7 w-7 rounded-md bg-emerald-500" />
-            )}
-            <span className="font-semibold tracking-tight">Crunch</span>
-          </div>
+    <div className="min-h-screen bg-white text-neutral-900 flex flex-col">
+      <a href="#main" className="skip-link">
+        Skip to main content
+      </a>
 
-          <nav className="hidden md:flex items-center gap-6 text-sm text-neutral-300">
-            <a href="#how" className="hover:text-neutral-100">How it works</a>
-            <a href="#why" className="hover:text-neutral-100">Why Crunch</a>
-            <a href="#coach" className="hover:text-neutral-100">Coach/Trainer</a>
-            <a href="#faq" className="hover:text-neutral-100">FAQ</a>
-            <RepButton
-              reps={reps}
-              cap={REP_CAP}
-              disabled={capHit}
-              onClick={() => {
-                awardReps(1, 'rep_click');
-                track('CTA', { where: 'header' });
-                scrollToJoin();
-              }}
-            />
-          </nav>
+      <Header onJoin={scrollToJoin} />
 
-          <button
-            onClick={() => { scrollToJoin(); track('CTA', { where: 'header_mobile' }); }}
-            className="md:hidden rounded-lg bg-indigo-500 px-3 py-1.5 font-semibold text-neutral-900 hover:bg-indigo-400"
-          >
-            Join
-          </button>
-        </div>
-      </header>
+      <main className="flex-1" id="main">
+        <Hero onJoin={scrollToJoin} />
 
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-neutral-900/60">
-        {/* Subtle brand gradients */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          aria-hidden
-          style={{
-            background: `radial-gradient(700px 700px at 10% -10%, #6D28D933 0, transparent 60%),
-                         radial-gradient(700px 700px at 90% 110%, #F9731633 0, transparent 60%)`,
-          }}
-        />
-        <div className="mx-auto max-w-6xl px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
-          <div>
-            {/* Early chip */}
-            <div
-              className="inline-flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/70 px-3 py-1 text-xs text-neutral-300"
-              title={`Early sign-ups get ${FREE_DAYS} days free after launch`}
-            >
-              <span className="text-emerald-400">●</span>
-              Early Access cohort — <b className="mx-1 text-white">bank reps</b> to move up your invite wave
-            </div>
+        <WhySwitchSection coachSize={coachSize} onCoachSizeChange={setCoachSize} />
 
-            <h1 className="mt-3 text-4xl md:text-5xl font-extrabold leading-tight">
-              Train first. A pocket personal coach you can text.
-            </h1>
+        <ScrollStory onJoin={scrollToJoin} />
 
-            <p className="mt-4 text-neutral-300 max-w-xl">
-              AI workouts that adapt to your goal, schedule, equipment, and injuries.
-              Text the <b>Pocket Coach</b> to fix a day without losing quality.
-              <br />
-              <span className="text-neutral-400">
-                Weekly Reports tune your next week. Snap‑to‑Macro is in development.
-              </span>
-            </p>
+        <WeeklyAcceptDeepDive onJoin={scrollToJoin} />
 
-            <div className="mt-8 flex items-center gap-3">
-              <RepButton
-                reps={reps}
-                cap={REP_CAP}
-                disabled={capHit}
-                onClick={() => {
-                  awardReps(1, 'rep_click');
-                  track('CTA', { where: 'hero' });
-                  scrollToJoin();
-                }}
-                large
-              />
-              <span className="text-xs text-neutral-500">Daily cap {REP_CAP}. Milestones at 10 / 25 / 50.</span>
-            </div>
+        <PocketCoachDeepDive onJoin={scrollToJoin} />
 
-            {milestoneText && (
-              <p className="mt-3 text-xs text-emerald-300" aria-live="polite">
-                {milestoneText}
-              </p>
-            )}
-          </div>
+        <CoachDeskDeepDive onJoin={scrollToJoin} />
 
-          {/* Right: product mock (planner + chat) */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
-            <div className="text-sm text-neutral-400">Today • Planner</div>
-            <div className="mt-3 space-y-3">
-              <Bar label="Plan readiness" value={0.85} suffix="Accept‑Week ready" />
-              <Bar label="Strength exposure" value={0.72} suffix="On target" />
-              <Bar label="Conditioning" value={0.55} suffix="+1 session suggested" />
-            </div>
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <Card title="Next Up" note="Lower • 45 min • RPE 7" />
-              <Card title="After" note="Tempo Run • 25 min" />
-            </div>
-            {/* Chat preview */}
-            <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900/70 p-4">
-              <div className="text-xs text-neutral-400 mb-2">Pocket Coach</div>
-              <ChatBubble who="you" text="Only 25 minutes today." />
-              <ChatBubble who="crunch" text="Kept anchors, trimmed accessory, tightened rests. Ready?" />
-              <div className="mt-2 text-right">
-                <span className="inline-block rounded-lg border border-emerald-600/40 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
-                  One‑tap Accept‑Week
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+        <SwitchingSection />
 
-      {/* How it works */}
-      <section id="how" className="mx-auto max-w-6xl px-4 py-16">
-        <h2 className="text-3xl md:text-4xl font-bold">How it works</h2>
-        <div className="mt-6 grid md:grid-cols-3 gap-6">
-          {[
-            {
-              t: 'Generate → Accept',
-              d: 'One tap creates your week from goal, time, equipment, and injuries. Start today.',
-            },
-            {
-              t: 'Train & log fast',
-              d: 'One‑thumb set done with optional RIR/RPE; clear “Next Up” keeps you moving.',
-            },
-            {
-              t: 'Text your coach',
-              d: '“Busy.” “Knee tweak.” “Hotel gym.” One message; Crunch adjusts and preserves quality.',
-            },
-          ].map((i) => (
-            <div key={i.t} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-              <h4 className="font-semibold">{i.t}</h4>
-              <p className="mt-1 text-sm text-neutral-300">{i.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+        <CompareSection />
 
-      {/* Week‑1 Glance (replaces detailed plan preview) + DM Simulator */}
-      <section className="mx-auto max-w-6xl px-4 pb-2 grid lg:grid-cols-2 gap-8 items-start">
-        <WeekOneGlance
-          seedGoal={quiz.goal}
-          seedMinutes={typeof quiz.avgMinutes === 'number' ? quiz.avgMinutes : undefined}
-          seedEquipment={quiz.equipment}
-          onJoin={() => {
-            scrollToJoin();
-            track('CTA', { where: 'week_one_join' });
-          }}
-        />
+        <PricingSection onJoin={scrollToJoin} />
 
-        <DMSimulator
-          onSim={(key) => {
-            awardReps(3, `dm_sim_${key}`);
-            track('DMSim', { key });
-          }}
-        />
-      </section>
+        <ResultsStrip />
 
-      {/* Why Crunch */}
-      <section id="why" className="mx-auto max-w-6xl px-4 pb-4">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
-          <h3 className="text-2xl font-bold">Why Crunch</h3>
-          <ul className="mt-4 grid md:grid-cols-2 gap-3 text-sm text-neutral-300">
-            <li>• <b>Less planning, more training</b>: Accept‑Week, instant Pocket Coach edits, fast logging.</li>
-            <li>• <b>Scientifically sound</b>: SRA spacing, RPE caps, weekly set ceilings, injury filters, auto‑deload.</li>
-            <li>• <b>Actually helpful</b>: Text constraints; session adjusts without losing quality.</li>
-            <li>• <b>Weekly Report → Accept‑Week</b>: progress rolled straight into next week.</li>
-            <li>• <b>Athlete Mode</b>: sport/position presets; in/off‑season; practice‑aware caps.</li>
-            <li>• <b>Snap‑to‑Macro</b> (WIP): quick, approximate daily macros — optional and lightweight.</li>
-          </ul>
-        </div>
-      </section>
+        <SocialProofSection />
 
-      {/* Who it's for + Coach/Trainer */}
-      <section id="coach" className="mx-auto max-w-6xl px-4 pb-8 grid lg:grid-cols-3 gap-6">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
-          <h4 className="font-semibold text-white">For everyone</h4>
-          Plans tailored to your goal, time, equipment, and injuries. No guesswork.
-        </div>
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
-          <h4 className="font-semibold text-white">Athlete Mode</h4>
-          Sport & position presets, in/off‑season toggles, practice‑aware scheduling.
-          <ul className="mt-2 list-disc list-inside text-xs text-neutral-400">
-            <li>Soccer—Winger: repeat sprints, COD plyos, ham pre‑hab; taper.</li>
-            <li>Basketball—Guard: accel/decel control, tendon care; taper.</li>
-            <li>Volleyball—Setter/OH: jump‑contact budgets; landing mechanics.</li>
-          </ul>
-        </div>
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
-          <h4 className="font-semibold text-white">Coach/Trainer Pro</h4>
-          DM proposals, individualized assignments, schedule/workout builder, adherence & nudges.
-          <label className="mt-3 flex items-center gap-2">
-            <input
-              type="checkbox"
-              className="accent-indigo-500"
-              checked={isCoach}
-              onChange={(e) => setIsCoach(e.currentTarget.checked)}
-            />
-            I’m a coach / trainer <span className="text-neutral-400">(separate list)</span>
-          </label>
-        </div>
-      </section>
+        <JoinSection />
 
-      {/* Join form */}
-      <section id="join" className="mx-auto max-w-6xl px-4 pb-16">
-        <div className="grid lg:grid-cols-3 gap-10 items-start">
-          <div className="lg:col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
-            {!submitted ? (
-              <form onSubmit={handleSubmit} className="space-y-4" aria-live="polite" noValidate>
-                <h3 className="text-xl font-semibold">Get Early Access</h3>
+        <FaqSection />
+      </main>
 
-                {/* Honeypot (hidden) */}
-                <input type="text" name="company" className="hidden" tabIndex={-1} autoComplete="off" />
-
-                <div>
-                  <label className="block text-sm text-neutral-300">Email</label>
-                  <input
-                    required
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className="mt-1 w-full rounded-xl bg-neutral-800/70 px-4 py-3 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
-                    name="email"
-                    placeholder="you@email.com"
-                    aria-invalid={!!error}
-                    onInput={(e) => {
-                      // Lowercase only; never manipulate caret (prevents rare setSelectionRange crashes)
-                      try {
-                        const el = e.currentTarget as HTMLInputElement;
-                        const lower = el.value.toLowerCase();
-                        if (el.value !== lower) el.value = lower;
-                      } catch { /* ignore */ }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') track('CTA', { where: 'form_enter' });
-                    }}
-                  />
-
-                  {/* Coach/Trainer segmentation directly in the form */}
-                  <label className="mt-3 flex items-center gap-2 text-sm text-neutral-300">
-                    <input
-                      type="checkbox"
-                      className="accent-indigo-500"
-                      checked={isCoach}
-                      onChange={(e) => setIsCoach(e.currentTarget.checked)}
-                    />
-                    I’m a coach / trainer <span className="text-neutral-400">(separate list)</span>
-                  </label>
-
-                  <p className="mt-2 text-xs text-neutral-500">
-                    No spam. We’ll notify you at launch and include your {FREE_DAYS}-day free period.
-                  </p>
-                </div>
-
-                {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-6 py-3 font-semibold text-neutral-900 hover:bg-indigo-400 disabled:opacity-60"
-                    aria-busy={loading}
-                    onClick={() => track('CTA', { where: 'form_submit' })}
-                  >
-                    {loading ? 'Sending…' : 'Reserve my spot'}
-                  </button>
-                  <RepButton
-                    reps={reps}
-                    cap={REP_CAP}
-                    disabled={capHit}
-                    onClick={() => awardReps(1, 'rep_click')}
-                  />
-                </div>
-              </form>
-            ) : (
-              <div className="text-left" aria-live="polite">
-                <h4 className="text-xl font-semibold">You’re on the list{isCoach ? ' (Coach/Trainer)' : ''}</h4>
-                <p className="mt-1 text-neutral-300">{infoMsg}</p>
-
-                {/* Referral */}
-                <div className="mt-6">
-                  <h5 className="font-semibold text-white">Share your link (+25 reps per friend)</h5>
-                  <ReferralPanel myRefCode={myRefCode} />
-                </div>
-
-                {/* Micro‑quiz */}
-                {!quizSubmitted ? (
-                  <form onSubmit={handleQuizSubmit} className="mt-8 grid md:grid-cols-2 gap-4">
-                    <Field label="Your main goal">
-                      <select
-                        required
-                        className="w-full rounded-xl bg-neutral-800/70 px-3 py-2 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
-                        value={quiz.goal}
-                        onChange={(e) => setQuiz((q) => ({ ...q, goal: e.currentTarget.value as QuizState['goal'] }))}
-                      >
-                        <option value="">Select…</option>
-                        <option value="build">Build muscle</option>
-                        <option value="lean">Get lean</option>
-                        <option value="recomp">Recomposition</option>
-                        <option value="sport">Sport‑specific</option>
-                      </select>
-                    </Field>
-
-                    <Field label="How many days per week can you train?">
-                      <input
-                        required
-                        type="number"
-                        min={1}
-                        max={7}
-                        className="w-full rounded-xl bg-neutral-800/70 px-3 py-2 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
-                        value={quiz.daysPerWeek}
-                        onChange={(e) =>
-                          setQuiz((q) => ({ ...q, daysPerWeek: parseIntSafe(e.currentTarget.value) || '' }))
-                        }
-                      />
-                    </Field>
-
-                    <Field label="Typical session length (minutes)">
-                      <input
-                        required
-                        type="number"
-                        min={10}
-                        max={180}
-                        className="w-full rounded-xl bg-neutral-800/70 px-3 py-2 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
-                        value={quiz.avgMinutes}
-                        onChange={(e) =>
-                          setQuiz((q) => ({ ...q, avgMinutes: parseIntSafe(e.currentTarget.value) || '' }))
-                        }
-                      />
-                    </Field>
-
-                    <Field label="Equipment you have (select all that apply)">
-                      <div className="flex flex-wrap gap-2">
-                        {['bodyweight', 'db', 'barbell', 'machines', 'bands'].map((k) => (
-                          <button
-                            key={k}
-                            type="button"
-                            onClick={() => toggleEquipment(k)}
-                            className={`px-3 py-1.5 rounded-lg text-sm border ${
-                              quiz.equipment.includes(k)
-                                ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
-                                : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
-                            }`}
-                          >
-                            {k === 'db' ? 'Dumbbells' : k.charAt(0).toUpperCase() + k.slice(1)}
-                          </button>
-                        ))}
-                      </div>
-                    </Field>
-
-                    <div className="md:col-span-2 flex items-center gap-3">
-                      <button
-                        type="submit"
-                        disabled={quizSaving}
-                        className="rounded-xl bg-emerald-500 px-5 py-2 font-semibold text-neutral-900 hover:bg-emerald-400 disabled:opacity-60"
-                      >
-                        {quizSaving ? 'Saving…' : 'Send my preferences'}
-                      </button>
-                      <p className="text-xs text-neutral-500">We’ll use this to seed your preview & Weekly Report.</p>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900/60 p-4">
-                    <p className="text-sm text-neutral-300">
-                      Thanks! Your preferences are saved. Keep banking reps to move up your invite wave.
-                    </p>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="mt-8 flex items-center gap-3">
-                  <a
-                    href="#faq"
-                    className="rounded-lg border border-neutral-800 px-4 py-2 text-sm hover:bg-neutral-900"
-                    onClick={() => track('Nav', { to: 'faq', from: 'success' })}
-                  >
-                    Read FAQ
-                  </a>
-                  <button
-                    onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); track('CTA', { where: 'back_to_top' }); }}
-                    className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-indigo-400"
-                  >
-                    Back to top
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right column: Benefits */}
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-              <h4 className="font-semibold">Why sign up now?</h4>
-              <p className="mt-1 text-sm text-neutral-300">
-                Be first to try Crunch and lock in <b>{FREE_DAYS} days free</b> after launch. We’ll ship updates often and listen closely.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-              <h4 className="font-semibold">Easier to follow</h4>
-              <p className="mt-1 text-sm text-neutral-300">
-                Clear “Next Up,” one‑tap Accept‑Week, and fast logging keep you on plan without mental overhead.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" className="mx-auto max-w-6xl px-4 pb-16">
-        <h2 className="text-3xl md:text-4xl font-bold">FAQ</h2>
-        <div className="mt-6 grid md:grid-cols-2 gap-6">
-          {[
-            {
-              q: 'Is Crunch beginner‑friendly?',
-              a: 'Yes — progression is safe and scalable. Start with bodyweight or dumbbells; Crunch adapts.',
-            },
-            {
-              q: 'Do I need a gym?',
-              a: 'No. Plans adapt to what you have: bodyweight, DBs, bands, or a full gym; hotel‑friendly swaps included.',
-            },
-            {
-              q: 'Busy or dealing with pain?',
-              a: 'Text Pocket Coach. It replans without losing training quality — trims, substitutes, and protects spacing.',
-            },
-            {
-              q: 'What about nutrition?',
-              a: 'Snap‑to‑Macro (in development) provides quick, approximate daily macros without heavy tracking.',
-            },
-          ].map((item) => (
-            <div key={item.q} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-              <h4 className="font-semibold">{item.q}</h4>
-              <p className="mt-1 text-sm text-neutral-300">{item.a}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Mobile sticky CTA */}
-      {!submitted && (
-        <div
-          className="md:hidden fixed left-0 right-0 z-40 flex justify-center"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}
-        >
-          <button
-            onClick={() => { scrollToJoin(); track('CTA', { where: 'mobile_sticky' }); }}
-            className="rounded-full bg-indigo-500 px-6 py-3 font-semibold text-neutral-900 shadow-lg shadow-indigo-500/20 hover:bg-indigo-400"
-          >
-            Get {FREE_DAYS} days free
-          </button>
-        </div>
-      )}
-
-      {/* Footer */}
-      <footer className="mt-auto border-t border-neutral-800/60">
-        <div className="mx-auto max-w-6xl px-4 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-neutral-300">
-            {logoOk ? (
-              <img src={LOGO_SRC} alt="Crunch logo" className="h-6 w-6 rounded-md object-contain" />
-            ) : (
-              <div className="h-6 w-6 rounded-md bg-emerald-500" />
-            )}
-            <span className="font-semibold">Crunch</span>
-            <span className="text-neutral-500">© {new Date().getFullYear()}</span>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 text-sm text-neutral-400 text-center md:text-left">
-            <span>
-              Contact{' '}
-              <a className="underline hover:text-neutral-200" href="mailto:xrventuresllc@gmail.com">
-                xrventuresllc@gmail.com
-              </a>{' '}
-              • <span className="text-neutral-500">Xuru Ren — Founder</span>
-            </span>
-            <LinkedInLink placement="footer" />
-            <a className="underline hover:text-neutral-200" href="/privacy.html">Privacy</a>
-          </div>
-
-          <div className="text-xs text-neutral-500 text-center md:text-right">
-            We’ll email you when Crunch is ready and include your {FREE_DAYS}-day free period.
-          </div>
-        </div>
-      </footer>
+      <Footer />
+      <MobileBottomCta onJoin={scrollToJoin} />
     </div>
+  );
+};
+
+export default App;
+
+/* -------------------------------------------------------------------------- */
+/* Small layout primitives                                                    */
+/* -------------------------------------------------------------------------- */
+
+function Band({
+  id,
+  tone = 'default',
+  children,
+  className = '',
+  containerClassName = 'max-w-6xl',
+  cv = true,
+}: {
+  id?: string;
+  tone?: BandTone;
+  children: React.ReactNode;
+  className?: string;
+  containerClassName?: string;
+  cv?: boolean;
+}) {
+  const tones: Record<BandTone, string> = {
+    default: 'bg-white text-neutral-900 border-b border-neutral-200/70',
+    soft: 'bg-neutral-50 text-neutral-900 border-b border-neutral-200/70',
+    dark: 'bg-black text-neutral-50 border-b border-white/10',
+  };
+
+  return (
+    <section
+      id={id}
+      className={`${cv ? 'cv-auto' : ''} ${tones[tone]} py-16 sm:py-20 lg:py-24 ${className}`}
+    >
+      <div className={`mx-auto ${containerClassName} px-4 sm:px-6 lg:px-8`}>
+        {children}
+      </div>
+    </section>
   );
 }
 
-/* -------------------------------------------------
-   Reusable components
---------------------------------------------------*/
-function RepButton({
-  reps,
-  cap,
+function PrimaryButton({
+  children,
   onClick,
-  disabled,
-  large,
+  className = '',
+  type = 'button',
 }: {
-  reps: number;
-  cap: number;
-  onClick: () => void;
-  disabled?: boolean;
-  large?: boolean;
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+  type?: 'button' | 'submit';
 }) {
-  const pct = Math.min(100, (reps / cap) * 100);
   return (
     <button
+      type={type}
       onClick={onClick}
-      aria-label="Get Early Access and add reps to jump the line"
-      disabled={disabled}
-      className={`relative flex items-center gap-2 rounded-2xl ${large ? 'px-6 py-3' : 'px-4 py-2'}
-                  text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98]
-                  transition transform shadow-md disabled:opacity-60`}
+      className={`rounded-full bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white shadow-brand hover:bg-violet-700 ${className}`}
     >
-      <span className="font-semibold">{large ? 'Get Early Access' : 'Add reps'}</span>
-      <span className="text-xs bg-white/15 rounded-full px-2 py-1">
-        Reps: {reps}{reps >= cap ? ' (cap)' : ''}
-      </span>
-      {/* tiny progress bar */}
-      <span aria-hidden className="absolute -bottom-1 left-1 right-1 h-1 bg-white/10 rounded-full">
-        <span className="block h-1 bg-white/80 rounded-full" style={{ width: `${pct}%` }} />
-      </span>
+      {children}
     </button>
   );
 }
 
-function Bar({ label, value, suffix }: { label: string; value: number; suffix?: string }) {
-  const pct = Math.max(0, Math.min(1, value));
-  return (
-    <div>
-      <div className="flex items-center justify-between text-xs text-neutral-400">
-        <span>{label}</span>
-        {suffix && <span>{suffix}</span>}
-      </div>
-      <div className="mt-1 h-2.5 w-full rounded-full bg-neutral-800">
-        <div
-          className="h-2.5 rounded-full bg-emerald-500"
-          style={{ width: `${pct * 100}%` }}
-          aria-valuenow={Math.round(pct * 100)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          role="progressbar"
-        />
-      </div>
-    </div>
-  );
-}
-
-function Card({ title, note }: { title: string; note: string }) {
-  return (
-    <div className="rounded-xl border border-neutral-800 bg-neutral-900/70 p-4">
-      <div className="text-sm text-neutral-300">{title}</div>
-      <div className="mt-1 text-xs text-neutral-500">{note}</div>
-      <div className="mt-3 h-8 rounded-md border border-neutral-800 bg-neutral-900/60" />
-    </div>
-  );
-}
-
-function ChatBubble({ who, text }: { who: 'you' | 'crunch'; text: string }) {
-  const isYou = who === 'you';
-  return (
-    <div className={`mt-2 flex ${isYou ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-          isYou ? 'bg-indigo-500 text-neutral-900' : 'bg-neutral-800 text-neutral-200'
-        }`}
-      >
-        {text}
-      </div>
-    </div>
-  );
-}
-
-function LinkedInLink({ placement = 'footer' }: { placement?: 'footer' | 'success' }) {
-  const url = `${LINKEDIN_URL}?utm_source=site&utm_medium=${placement}&utm_campaign=social_follow`;
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="LinkedIn"
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-900"
-      onClick={() => track('Social', { network: 'LinkedIn', placement })}
-    >
-      {/* LinkedIn icon */}
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-        <path d="M4.98 3.5C4.98 4.88 3.86 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0 8h5v16H0V8zm7.5 0h4.8v2.2h.07c.67-1.2 2.32-2.47 4.78-2.47C21.9 7.73 24 9.7 24 13.4V24h-5v-9c0-2.15-.77-3.6-2.7-3.6-1.47 0-2.35.99-2.73 1.95-.14.34-.18.8-.18 1.27V24H7.5V8z" />
-      </svg>
-    </a>
-  );
-}
-
-/* ---------- Structured UI helpers ---------- */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="block text-sm text-neutral-300">{label}</span>
-      <div className="mt-1">{children}</div>
-    </label>
-  );
-}
-
-/* ---------- Referral ---------- */
-function ReferralPanel({ myRefCode }: { myRefCode: string }) {
-  const base = typeof window !== 'undefined' ? window.location.origin : '';
-  const link = `${base}?ref=${encodeURIComponent(myRefCode)}`;
-  return (
-    <div className="mt-2 flex flex-col sm:flex-row gap-2 max-w-xl">
-      <input readOnly value={link} className="flex-1 rounded-xl bg-neutral-800/70 px-3 py-2 text-sm ring-1 ring-neutral-800" />
-      <button
-        className="rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-900"
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(link);
-            track('Referral', { action: 'copy' });
-          } catch { /* ignore */ }
-        }}
-      >
-        Copy link
-      </button>
-    </div>
-  );
-}
-
-/* ---------- Week‑1 Glance (simple, persuasive, non-prescriptive) ---------- */
-function WeekOneGlance({
-  seedGoal,
-  seedMinutes,
-  seedEquipment,
-  onJoin,
+function SecondaryLink({
+  children,
+  href,
+  onClick,
+  className = '',
 }: {
-  seedGoal?: QuizState['goal'] | '';
-  seedMinutes?: number;
-  seedEquipment?: string[];
-  onJoin: () => void;
+  children: React.ReactNode;
+  href?: string;
+  onClick?: () => void;
+  className?: string;
 }) {
-  const [goal, setGoal] = useState<NonNullable<QuizState['goal']>>(seedGoal || 'build');
-  const [minutes, setMinutes] = useState<number>(Math.min(Math.max(seedMinutes || 45, 20), 120));
-  const [equipment, setEquipment] = useState<string[]>(
-    (seedEquipment && seedEquipment.length ? seedEquipment : ['bodyweight', 'db']).slice(0, 4)
-  );
-
-  useEffect(() => { if (seedGoal) setGoal(seedGoal as NonNullable<QuizState['goal']>); }, [seedGoal]);
-  useEffect(() => { if (seedMinutes) setMinutes(Math.min(Math.max(seedMinutes, 20), 120)); }, [seedMinutes]);
-  useEffect(() => { if (seedEquipment && seedEquipment.length) setEquipment(seedEquipment.slice(0, 4)); }, [seedEquipment]);
-
-  function toggleEq(k: string) {
-    setEquipment((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  const base = `text-sm font-medium text-neutral-700 hover:text-neutral-900 ${className}`;
+  if (href) {
+    return (
+      <a href={href} className={base}>
+        {children}
+      </a>
+    );
   }
-
-  const summary = useMemo(
-    () =>
-      `≈${minutes}m • ` +
-      equipment.map((k) => (k === 'db' ? 'DB' : k[0].toUpperCase() + k.slice(1))).join(' + '),
-    [minutes, equipment]
-  );
-
-  const title = useMemo(() => {
-    if (goal === 'lean') return 'Full‑Body Circuit';
-    if (goal === 'recomp') return 'Upper Focus + Easy Conditioning';
-    if (goal === 'sport') return 'Athlete — Speed & Power';
-    return 'Push (Strength)';
-  }, [goal]);
-
-  const estSessions =
-    minutes >= 60 ? 4 : minutes >= 45 ? 3 : minutes >= 30 ? 3 : 2;
-
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-      <h3 className="text-xl font-semibold">Week 1 — what you’ll get</h3>
-      <p className="mt-1 text-sm text-neutral-300">
-        Pick goal, time & equipment. Crunch drafts a safe, effective week with science guardrails (SRA spacing, RPE caps, weekly set ceilings) — without heavy setup.
-      </p>
+    <button type="button" onClick={onClick} className={base}>
+      {children}
+    </button>
+  );
+}
 
-      {/* Quick setup controls */}
-      <div className="mt-4 grid md:grid-cols-3 gap-3">
-        <label className="block">
-          <span className="block text-xs text-neutral-400">Goal</span>
-          <select
-            className="mt-1 w-full rounded-xl bg-neutral-800/70 px-3 py-2 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
-            value={goal}
-            onChange={(e) => setGoal(e.currentTarget.value as QuizState['goal'])}
-          >
-            <option value="build">Build muscle</option>
-            <option value="lean">Get lean</option>
-            <option value="recomp">Recomposition</option>
-            <option value="sport">Sport‑specific</option>
-          </select>
-        </label>
+/* -------------------------------------------------------------------------- */
+/* Header                                                                     */
+/* -------------------------------------------------------------------------- */
 
-        <label className="block">
-          <span className="block text-xs text-neutral-400">Minutes</span>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {[20, 30, 45, 60].map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => (setMinutes(m))}
-                className={`px-3 py-1.5 rounded-lg text-sm border ${
-                  minutes === m
-                    ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
-                    : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
-                }`}
-              >
-                {m}m
-              </button>
-            ))}
+function Header({ onJoin }: { onJoin: () => void }) {
+  return (
+    <header className="safe-pt sticky top-0 z-50 border-b border-neutral-200/70 bg-white/80 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <a href="#" className="flex items-center gap-2">
+          <img
+            src="/Lungeable%20Logo.png"
+            alt="Lungeable logo"
+            className="h-7 w-7 rounded-xl"
+          />
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold tracking-tight text-neutral-900">
+              Lungeable
+            </span>
+            <span className="text-[11px] text-neutral-500">Adaptive training OS</span>
           </div>
-        </label>
+        </a>
 
-        <label className="block">
-          <span className="block text-xs text-neutral-400">Equipment</span>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {['bodyweight', 'db', 'barbell', 'machines', 'bands'].map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => toggleEq(k)}
-                className={`px-3 py-1.5 rounded-lg text-sm border ${
-                  equipment.includes(k)
-                    ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
-                    : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
-                }`}
-              >
-                {k === 'db' ? 'Dumbbells' : k.charAt(0).toUpperCase() + k.slice(1)}
-              </button>
-            ))}
-          </div>
-        </label>
-      </div>
+        <div className="flex items-center gap-3">
+          <nav className="hidden items-center gap-6 text-sm text-neutral-600 md:flex">
+            <a href="#product" className="hover:text-neutral-900">
+              Product
+            </a>
+            <a href="#how" className="hover:text-neutral-900">
+              How it works
+            </a>
+            <a href="#compare" className="hover:text-neutral-900">
+              Compare
+            </a>
+            <a href="#pricing" className="hover:text-neutral-900">
+              Pricing
+            </a>
+            <a href="/login" className="hover:text-neutral-900">
+              Log in
+            </a>
+          </nav>
 
-      {/* Simple persuasive preview (no exercise specifics) */}
-      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/70 p-4">
-        <div className="flex items-center justify-between text-xs text-neutral-400">
-          <span>{title}</span>
-          <span>{summary}</span>
-        </div>
-        <ul className="mt-3 grid sm:grid-cols-2 gap-2 text-sm text-neutral-300">
-          <li>• Accept‑Week plan (~{estSessions} sessions)</li>
-          <li>• Pocket Coach ready — text to adjust</li>
-          <li>• Safe progression (SRA/RPE/sets)</li>
-          <li>• Hotel‑gym friendly swaps</li>
-        </ul>
-
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            onClick={onJoin}
-            className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-indigo-400"
-          >
-            Reserve my spot
-          </button>
-          <span className="text-xs text-neutral-500">
-            Illustrative — your real plan adapts weekly with Pocket Coach & Weekly Report.
-          </span>
+          <PrimaryButton onClick={onJoin} className="px-4 py-2 text-xs sm:text-sm">
+            Apply for early access
+          </PrimaryButton>
         </div>
       </div>
-      <p className="mt-2 text-xs text-neutral-500">Switch goal/minutes/equipment to see how Crunch adapts the week.</p>
+    </header>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Hero                                                                       */
+/* -------------------------------------------------------------------------- */
+
+function Hero({ onJoin }: { onJoin: () => void }) {
+  return (
+    <section className="relative overflow-hidden bg-black text-neutral-50 pt-16 pb-16 sm:pt-20 sm:pb-20 lg:pt-24 lg:pb-24 border-b border-white/10">
+      <div className="absolute inset-x-0 -top-40 -z-10 h-72 bg-gradient-to-b from-violet-500/25 via-transparent to-transparent blur-3xl" />
+
+      <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:px-8">
+        {/* Text column */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-200">
+            Adaptive programming OS for remote coaches
+          </p>
+
+          <h1
+            className="mt-4 font-semibold tracking-tight text-balance"
+            style={{ fontSize: 'clamp(2.3rem, 5vw, 3.5rem)' }}
+          >
+            Weekly Reports write next week.
+            <span className="text-violet-200"> You review and Accept‑Week.</span>
+          </h1>
+
+          <p className="mt-4 text-sm text-neutral-300 measure">
+            Lungeable drafts safe, effective weeks from your constraints, proposes mid‑week
+            replans from client DMs, and keeps your progression rules intact — so you spend
+            your time coaching, not rewriting spreadsheets.
+          </p>
+
+          <p className="mt-3 text-xs text-neutral-400">
+            Guardrails built in: SRA spacing, set ceilings, exposure budgets, auto‑deload.
+          </p>
+
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            <PrimaryButton onClick={onJoin}>
+              Apply for early access
+            </PrimaryButton>
+
+            <a href="#how" className="text-sm font-medium text-neutral-300 hover:text-white">
+              See how it works →
+            </a>
+          </div>
+
+          <p className="mt-3 text-xs text-neutral-500">
+            Limited seats while we iterate with coaches. No credit card, no lock‑in.
+          </p>
+        </div>
+
+        {/* Visual */}
+        <div className="relative">
+          <AcceptWeekHeroVisual />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MacWindow({
+  title,
+  children,
+  className = '',
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`relative ${className}`}>
+      <div className="absolute -inset-10 rounded-[3rem] bg-gradient-to-br from-violet-500/20 via-transparent to-amber-400/15 blur-3xl" />
+      <div className="relative overflow-hidden rounded-[2.25rem] border border-white/10 bg-neutral-900 shadow-[0_40px_120px_rgba(0,0,0,0.55)]">
+        <div className="flex items-center justify-between px-5 py-3 text-[11px] text-neutral-300">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-rose-400" />
+            <span className="h-2 w-2 rounded-full bg-amber-300" />
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          </div>
+          <span className="font-medium text-neutral-200">{title}</span>
+          <span className="text-neutral-500">Lungeable Coach Web</span>
+        </div>
+        <div className="h-px bg-white/10" />
+        <div className="bg-neutral-950 p-4 sm:p-5">{children}</div>
+      </div>
     </div>
   );
 }
 
-/* ---------- DM Simulator ---------- */
-function DMSimulator({ onSim }: { onSim: (key: DMKey) => void }) {
-  const [lines, setLines] = useState<{ from: 'you' | 'coach'; text: string }[]>([]);
-  const [running, setRunning] = useState(false);
+function AcceptWeekHeroVisual() {
+  return (
+    <MacWindow title="Weekly Report → Accept‑Week">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-neutral-900/70 p-4">
+          <div className="flex items-center justify-between text-xs text-neutral-400">
+            <span className="font-semibold text-neutral-100">Weekly Report</span>
+            <span>Week 6</span>
+          </div>
 
-  const scenarios: Record<DMKey, { from: 'you' | 'coach'; text: string }[]> = {
-    busy: [
-      { from: 'you', text: 'Only 25 minutes today.' },
-      { from: 'coach', text: 'Keeping anchors. Trimming accessories. Tightening rests and pairing supersets.' },
-      { from: 'coach', text: 'Quality preserved. You’ll still hit exposure targets.' },
-    ],
-    knee: [
-      { from: 'you', text: 'Right knee aches—avoid deep flexion.' },
-      { from: 'coach', text: 'Swapping to ROM‑friendly patterns, tempo tweak, lower plyo volume.' },
-      { from: 'coach', text: 'SRA spacing protected. We keep the plan safe & effective.' },
-    ],
-    hotel: [
-      { from: 'you', text: 'Hotel gym — no bench.' },
-      { from: 'coach', text: 'Switching to DB/landmine variants. Weekly pressing exposure maintained.' },
-      { from: 'coach', text: 'You’re set. Let’s train.' },
-    ],
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <MiniStat label="Sessions" value="5/6" hint="83%" />
+            <MiniStat label="Avg RPE" value="7.1" hint="in range" />
+            <MiniStat label="Flags" value="1" hint="review" />
+          </div>
+
+          <div className="mt-3 space-y-2 text-xs">
+            <MiniRow label="Lower volume" value="−2 sets" />
+            <MiniRow label="Press exposure" value="maintained" />
+            <MiniRow label="Knee note" value="ROM tweak" />
+          </div>
+
+          <div className="mt-3 rounded-xl border border-white/10 bg-neutral-950/70 p-3 text-[11px] text-neutral-300">
+            “Proposed Week 7 respects your set ceilings and SRA spacing.”
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-neutral-900/70 p-4">
+          <div className="flex items-center justify-between text-xs text-neutral-400">
+            <span className="font-semibold text-neutral-100">Next Week Draft</span>
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">
+              Safe
+            </span>
+          </div>
+
+          <div className="mt-3 space-y-2 text-xs">
+            <WeekDayRow day="Mon" title="Lower" badge="Time‑fit" />
+            <WeekDayRow day="Wed" title="Upper" badge="Anchors kept" />
+            <WeekDayRow day="Fri" title="Lower" badge="Knee‑aware" />
+            <WeekDayRow day="Sat" title="Accessories" badge="Trimmed" />
+          </div>
+
+          <div className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2 text-[11px] text-neutral-300">
+            <span>Guardrails checked</span>
+            <span className="text-neutral-500">SRA • RPE • Sets</span>
+          </div>
+
+          <button
+            type="button"
+            className="mt-4 w-full rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-brand hover:bg-violet-700"
+          >
+            Accept‑Week
+          </button>
+
+          <p className="mt-2 text-[11px] text-neutral-500">
+            You can tweak anything before you accept. Accept just commits the week.
+          </p>
+        </div>
+      </div>
+    </MacWindow>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-neutral-950/60 p-3">
+      <p className="text-[11px] text-neutral-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-neutral-100">{value}</p>
+      <p className="mt-1 text-[11px] text-neutral-500">{hint}</p>
+    </div>
+  );
+}
+
+function MiniRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2">
+      <span className="text-neutral-300">{label}</span>
+      <span className="text-neutral-400">{value}</span>
+    </div>
+  );
+}
+
+function WeekDayRow({
+  day,
+  title,
+  badge,
+}: {
+  day: string;
+  title: string;
+  badge: string;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-neutral-950/60 px-3 py-2">
+      <div className="flex items-center gap-2 text-neutral-200">
+        <span className="w-8 text-[11px] text-neutral-400">{day}</span>
+        <span className="text-[13px]">{title}</span>
+      </div>
+      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-neutral-300">
+        {badge}
+      </span>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Why switch                                                                 */
+/* -------------------------------------------------------------------------- */
+
+function WhySwitchSection({
+  coachSize,
+  onCoachSizeChange,
+}: {
+  coachSize: CoachSize;
+  onCoachSizeChange: (size: CoachSize) => void;
+}) {
+  const sizeCopy: Record<CoachSize, string> = {
+    solo: 'Solo coach: weekly programming + check-ins stop eating your evenings.',
+    micro: '2–5 coach team: standardize templates while keeping each coach’s voice.',
+    team: 'Team/brand: juniors can run drafts while guardrails keep quality consistent.',
   };
 
-  function play(key: DMKey) {
-    if (running) return;
-    setRunning(true);
-    setLines([]);
-    onSim(key);
-    const seq = scenarios[key];
-    let i = 0;
-    const tick = () => {
-      setLines((prev) => [...prev, seq[i]]);
-      i += 1;
-      if (i < seq.length) setTimeout(tick, 600);
-      else setTimeout(() => setRunning(false), 300);
-    };
-    tick();
+  return (
+    <Band id="product" tone="default">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+          Why coaches switch
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl">
+          Sell the loop, not the features.
+        </h2>
+        <p className="mt-3 text-sm text-neutral-600">
+          Lungeable is built around one weekly ritual: run Weekly Reports, review the
+          proposed week, and Accept‑Week. Pocket Coach handles chaos in between — without
+          breaking the block.
+        </p>
+      </div>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <BenefitCard
+          title="End Sunday programming hell"
+          body="Draft weeks in minutes with guardrails. Stop rewriting 20+ spreadsheets by hand."
+        />
+        <BenefitCard
+          title="Guardrails enforce your rules"
+          body="SRA spacing, set ceilings, exposure budgets, deload logic — applied consistently across your roster."
+        />
+        <BenefitCard
+          title="Handle chaos without derailing progression"
+          body="“Hotel gym.” “Knee sore.” “Only 25 minutes.” Pocket Coach proposes safe swaps; you approve."
+        />
+        <BenefitCard
+          title="One coach view for plans + DMs + check-ins"
+          body="Coach Desk + Weekly Reports tell you who needs action and whose next week is ready to accept."
+        />
+      </div>
+
+      {/* Who it's for: keep the segmentation, but move it out of the hero */}
+      <div className="mt-10 rounded-3xl border border-neutral-200 bg-neutral-50 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-neutral-900">Built for how you run your roster</p>
+            <p className="mt-1 text-xs text-neutral-600">{sizeCopy[coachSize]}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 text-xs">
+            {(['solo', 'micro', 'team'] as CoachSize[]).map((size) => {
+              const selected = coachSize === size;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => onCoachSizeChange(size)}
+                  className={`min-h-[36px] rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    selected
+                      ? 'border-violet-300 bg-violet-600/10 text-violet-800'
+                      : 'border-neutral-300 bg-white text-neutral-700 hover:border-neutral-400'
+                  }`}
+                >
+                  {size === 'solo'
+                    ? 'Solo coach'
+                    : size === 'micro'
+                    ? '2–5 coach team'
+                    : 'Team / brand'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+function BenefitCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
+      <p className="text-sm font-semibold text-neutral-900">{title}</p>
+      <p className="mt-2 text-sm text-neutral-600">{body}</p>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scrollytelling "How it works"                                              */
+/* -------------------------------------------------------------------------- */
+
+function ScrollStory({ onJoin }: { onJoin: () => void }) {
+  const steps: { id: ScrollStepId; kicker: string; title: string; body: string }[] =
+    [
+      {
+        id: 'onboard',
+        kicker: 'Step 1 · Onboard in minutes',
+        title: 'Set goal, time and equipment. Lungeable drafts Week 1.',
+        body: 'You set constraints; Lungeable drafts a safe week in your style and flags any rule conflicts. You review and Accept‑Week.',
+      },
+      {
+        id: 'train',
+        kicker: 'Step 2 · Client trains & logs',
+        title: 'Logging stays lightweight — data feeds the Weekly Report.',
+        body: 'Clients mark sets done (optional RPE/RIR). Lungeable tracks adherence and trends without making the client UX complicated.',
+      },
+      {
+        id: 'dm',
+        kicker: 'Step 3 · Chaos is normal',
+        title: 'Clients DM constraints; Pocket Coach proposes safe session tweaks.',
+        body: '“Hotel gym, no bench.” “Right knee sore.” “Only 25 minutes.” Pocket Coach preserves anchors and exposures. You approve week‑level changes.',
+      },
+      {
+        id: 'report',
+        kicker: 'Step 4 · Weekly Report → Accept‑Week',
+        title: 'Weekly Reports propose next week. You review and Accept‑Week.',
+        body: 'Completion, load drift, RPE drift and constraint violations roll up into a clear weekly summary — then next week is ready to accept.',
+      },
+    ];
+
+  const stepIds = steps.map((s) => s.id);
+  const activeId = useScrollSteps(stepIds);
+
+  return (
+    <Band id="how" tone="soft">
+      <div className="grid max-w-6xl items-start gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16">
+        {/* Sticky device / visual */}
+        <div className="relative lg:sticky lg:top-[96px]">
+          <ScrollDevice activeId={activeId} onJoin={onJoin} />
+        </div>
+
+        {/* Text story */}
+        <div className="space-y-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+              How it works
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl">
+              The loop your clients never feel —
+              <span className="text-violet-700"> only the results.</span>
+            </h2>
+            <p className="mt-3 text-sm text-neutral-600">
+              This is the coach view of Lungeable: onboarding → training/logging → DM replans
+              → Weekly Report → Accept‑Week.
+            </p>
+
+            <StepProgress activeId={activeId} stepIds={stepIds} />
+          </div>
+
+          <div className="relative mt-4 space-y-6">
+            {steps.map((step) => {
+              const active = activeId === step.id;
+              return (
+                <article
+                  key={step.id}
+                  data-step-id={step.id}
+                  className={`relative rounded-2xl border-l pl-6 pr-4 py-4 transition-colors ${
+                    active
+                      ? 'border-violet-400 bg-white'
+                      : 'border-neutral-300 bg-transparent'
+                  }`}
+                >
+                  <div
+                    className={`absolute -left-[6px] top-7 h-3 w-3 rounded-full transition-all ${
+                      active
+                        ? 'bg-violet-500 shadow-[0_0_0_6px_rgba(124,58,237,0.18)]'
+                        : 'bg-neutral-300'
+                    }`}
+                  />
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">
+                    {step.kicker}
+                  </p>
+                  <h3 className="mt-1 text-base font-semibold text-neutral-900 sm:text-lg">
+                    {step.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-neutral-600">{step.body}</p>
+                </article>
+              );
+            })}
+
+            <div className="pt-4">
+              <PrimaryButton onClick={onJoin} className="px-5">
+                I want this for my roster →
+              </PrimaryButton>
+              <p className="mt-2 text-xs text-neutral-500">
+                Founding coaches get direct input into roadmap and pricing.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+function StepProgress({
+  activeId,
+  stepIds,
+}: {
+  activeId: ScrollStepId;
+  stepIds: ScrollStepId[];
+}) {
+  const index = stepIds.indexOf(activeId) + 1;
+
+  return (
+    <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500">
+      <span>
+        Step {index} of {stepIds.length}
+      </span>
+      <div className="flex gap-1">
+        {stepIds.map((id) => (
+          <span
+            key={id}
+            className={`h-1.5 w-3 rounded-full transition-all ${
+              id === activeId ? 'bg-violet-500' : 'bg-neutral-300'
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScrollDevice({
+  activeId,
+  onJoin,
+}: {
+  activeId: ScrollStepId;
+  onJoin: () => void;
+}) {
+  const reducedMotion = usePrefersReducedMotion();
+
+  const header =
+    activeId === 'onboard'
+      ? 'Week 1 draft'
+      : activeId === 'train'
+      ? 'Train & log'
+      : activeId === 'dm'
+      ? 'Pocket Coach DM'
+      : 'Weekly Report';
+
+  return (
+    <div className="relative h-full">
+      <div className="absolute -inset-8 rounded-[2.5rem] bg-gradient-to-br from-violet-500/15 via-transparent to-amber-400/10 blur-3xl" />
+      <div className={`${deviceShellClass} relative p-4 sm:p-5`}>
+        <div className="flex items-center justify-between text-[11px] text-neutral-500">
+          <span>Coach preview</span>
+          <span>{header}</span>
+        </div>
+
+        <div className="mt-3 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+        <div className="relative mt-4 h-[340px] sm:h-[360px]">
+          <DeviceScene visible={activeId === 'onboard'} reducedMotion={reducedMotion}>
+            <WeekOneGlance
+              seedGoal="build"
+              seedMinutes={45}
+              seedEquipment={['db', 'barbell']}
+              onJoin={onJoin}
+            />
+          </DeviceScene>
+
+          <DeviceScene visible={activeId === 'train'} reducedMotion={reducedMotion}>
+            <TrainLogPreview />
+          </DeviceScene>
+
+          <DeviceScene visible={activeId === 'dm'} reducedMotion={reducedMotion}>
+            <DMSimulator
+              onSim={() => {
+                // Hook for analytics later if needed
+              }}
+            />
+          </DeviceScene>
+
+          <DeviceScene visible={activeId === 'report'} reducedMotion={reducedMotion}>
+            <WeeklyReportPreview />
+          </DeviceScene>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeviceScene({
+  visible,
+  children,
+  reducedMotion,
+}: {
+  visible: boolean;
+  children: React.ReactNode;
+  reducedMotion: boolean;
+}) {
+  if (reducedMotion) {
+    return visible ? <div>{children}</div> : <div aria-hidden="true" className="hidden" />;
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
-      <h3 className="text-xl font-semibold">Text the coach — Crunch fixes it fast</h3>
-      <p className="mt-1 text-sm text-neutral-300">Natural‑language replans while preserving training quality.</p>
+    <div
+      className={`transition-all duration-500 ease-out will-change-transform ${
+        visible
+          ? 'relative z-10 opacity-100 translate-y-0 scale-100'
+          : 'absolute inset-0 opacity-0 -translate-y-2 scale-[0.98] pointer-events-none'
+      }`}
+      aria-hidden={!visible}
+    >
+      {children}
+    </div>
+  );
+}
 
-      <div className="mt-4 grid sm:grid-cols-3 gap-3">
-        <button className="rounded-xl border border-neutral-800 bg-neutral-900/70 p-3 text-left hover:bg-neutral-900"
-          onClick={() => play('busy')}>“Only 25 minutes today.”</button>
-        <button className="rounded-2xl border border-neutral-800 bg-neutral-900/70 p-3 text-left hover:bg-neutral-900"
-          onClick={() => play('knee')}>“Right knee aches—avoid deep flexion.”</button>
-        <button className="rounded-2xl border border-neutral-800 bg-neutral-900/70 p-3 text-left hover:bg-neutral-900"
-          onClick={() => play('hotel')}>“Hotel gym — no bench.”</button>
-      </div>
+function TrainLogPreview() {
+  return (
+    <div className="flex h-full flex-col justify-between rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm text-neutral-100">
+      <div>
+        <div className="flex items-center justify-between text-xs text-neutral-400">
+          <span>Today</span>
+          <span>Session 3 of 4</span>
+        </div>
 
-      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/70 p-4 min-h-[96px]" aria-live="polite">
-        {lines.length === 0 ? (
-          <p className="text-neutral-500 text-sm">Tap a scenario to preview the Pocket Coach (+3 reps).</p>
-        ) : (
-          lines.map((L, idx) => (
-            <div key={idx} className={`mt-2 flex ${L.from === 'you' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                  L.from === 'you' ? 'bg-indigo-500 text-neutral-900' : 'bg-neutral-800 text-neutral-200'
+        <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+          <p className="text-xs font-semibold text-neutral-100">Upper — time‑fit</p>
+          <p className="mt-1 text-[11px] text-neutral-400">
+            Quick logging. Optional RPE. No busywork.
+          </p>
+        </div>
+
+        <div className="mt-3 space-y-2 text-xs">
+          {[
+            { name: 'DB incline press', sets: '3×8', done: true },
+            { name: 'Row variation', sets: '3×10', done: true },
+            { name: 'Lat pulldown', sets: '2×12', done: false },
+            { name: 'Arms finisher', sets: '2×12', done: false },
+          ].map((item) => (
+            <div
+              key={item.name}
+              className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-950/50 px-3 py-2"
+            >
+              <div>
+                <p className="text-[13px] text-neutral-100">{item.name}</p>
+                <p className="text-[11px] text-neutral-400">{item.sets}</p>
+              </div>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                  item.done
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                    : 'border-white/10 bg-white/5 text-neutral-300'
                 }`}
               >
-                {L.text}
-              </div>
+                {item.done ? 'Done' : 'Next'}
+              </span>
             </div>
-          ))
-        )}
+          ))}
+        </div>
       </div>
-      <p className="mt-2 text-xs text-neutral-500">Each simulator run adds +3 reps.</p>
+
+      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950/50 px-3 py-2 text-[11px] text-neutral-400">
+        Completion + RPE drift roll into your Weekly Report automatically.
+      </div>
+    </div>
+  );
+}
+
+function WeeklyReportPreview() {
+  return (
+    <div className="flex h-full flex-col justify-between rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 text-sm text-neutral-100">
+      <div>
+        <div className="flex items-center justify-between text-xs text-neutral-400">
+          <span>Weekly Report — Ava</span>
+          <span>Week 6 → 7</span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+          <ReportTile label="Sessions" value="5/6" hint="83%" />
+          <ReportTile label="Avg RPE" value="7.1" hint="In range" />
+          <ReportTile label="Flags" value="1" hint="Review" />
+        </div>
+
+        <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950/60 p-3 text-xs text-neutral-200">
+          <p className="font-semibold text-neutral-100">Proposed week changes</p>
+          <ul className="mt-1 space-y-1 text-[11px] text-neutral-400">
+            <li>• Trim lower accessories (time fit)</li>
+            <li>• Keep pressing exposure (anchor preserved)</li>
+            <li>• Knee ROM tweak on squat pattern</li>
+          </ul>
+        </div>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          className="w-full rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-brand hover:bg-violet-700"
+        >
+          Accept‑Week
+        </button>
+        <p className="mt-2 text-[11px] text-neutral-400">
+          Approve the drafted week, or edit first. Your rules stay enforced either way.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ReportTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+}) {
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-3">
+      <p className="text-[11px] text-neutral-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-neutral-100">{value}</p>
+      <p className="mt-1 text-[11px] text-neutral-500">{hint}</p>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Signature deep dives                                                       */
+/* -------------------------------------------------------------------------- */
+
+function WeeklyAcceptDeepDive({ onJoin }: { onJoin: () => void }) {
+  return (
+    <Band tone="default">
+      <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+            Weekly Reports → Accept‑Week
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl">
+            The signature moment: next week is ready.
+          </h2>
+          <p className="mt-3 text-sm text-neutral-600">
+            Lungeable turns logs + check‑ins into a Weekly Report, then drafts a tuned next
+            week that respects your constraints. You review changes and Accept‑Week.
+          </p>
+
+          <ul className="mt-5 space-y-2 text-sm text-neutral-700">
+            <li>• Planned vs completed (per client, per exposure)</li>
+            <li>• Flags: missed sessions, RPE drift, load spikes</li>
+            <li>• Proposed adjustments that keep anchors and guardrails</li>
+            <li>• One-tap Accept‑Week (or edit first)</li>
+          </ul>
+
+          <div className="mt-6">
+            <PrimaryButton onClick={onJoin}>Apply to pilot this loop</PrimaryButton>
+            <p className="mt-2 text-xs text-neutral-500">
+              Start in shadow mode with 3–10 clients. Keep your stack.
+            </p>
+          </div>
+        </div>
+
+        <div className="relative">
+          <MacWindow title="Weekly Report → Accept‑Week" className="max-w-xl lg:max-w-none">
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-neutral-900/70 p-4">
+                <div className="flex items-center justify-between text-xs text-neutral-400">
+                  <span className="font-semibold text-neutral-100">Roster rollup</span>
+                  <span>Week 6</span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <MiniStat label="On track" value="5" hint="clients" />
+                  <MiniStat label="Needs action" value="2" hint="flags" />
+                  <MiniStat label="Ready" value="6" hint="Accept‑Week" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-neutral-900/70 p-4">
+                <p className="text-xs font-semibold text-neutral-100">Ava — Proposed Week 7</p>
+                <p className="mt-1 text-[11px] text-neutral-400">
+                  Time fit + knee ROM tweak. Press exposure preserved.
+                </p>
+                <button
+                  type="button"
+                  className="mt-3 w-full rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-brand hover:bg-violet-700"
+                >
+                  Accept‑Week
+                </button>
+              </div>
+
+              <p className="text-[11px] text-neutral-500">
+                This is a visual mock. Your real UI will show your templates, blocks and rules.
+              </p>
+            </div>
+          </MacWindow>
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+function PocketCoachDeepDive({ onJoin }: { onJoin: () => void }) {
+  return (
+    <Band tone="soft">
+      <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+            Pocket Coach
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl">
+            Handle chaos without breaking the block.
+          </h2>
+          <p className="mt-3 text-sm text-neutral-600">
+            Clients send constraints the way they already communicate: DMs. Pocket Coach proposes
+            guardrail‑safe swaps that preserve anchors and weekly exposures.
+          </p>
+
+          <ul className="mt-5 space-y-2 text-sm text-neutral-700">
+            <li>• Time crunch replans (25 minutes → still productive)</li>
+            <li>• Travel / hotel gym swaps</li>
+            <li>• Injury-aware patterns and ROM constraints</li>
+            <li>• Coach approval required for week‑level changes</li>
+          </ul>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <PrimaryButton onClick={onJoin}>Apply for early access</PrimaryButton>
+            <SecondaryLink href="#faq">Assistant, not replacement →</SecondaryLink>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <DMSimulator />
+          <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+            <p className="font-semibold text-neutral-900">Assistant, not replacement</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              Pocket Coach never “runs your business.” It proposes session tweaks; you keep
+              full control and approve week‑level updates.
+            </p>
+          </div>
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+function CoachDeskDeepDive({ onJoin }: { onJoin: () => void }) {
+  return (
+    <Band tone="default">
+      <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+            Coach Desk
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl">
+            Triage your roster in minutes.
+          </h2>
+          <p className="mt-3 text-sm text-neutral-600">
+            Instead of opening 10 tabs, Coach Desk tells you who needs action today: missed
+            sessions, drift, new DMs, and ready-to-accept weeks.
+          </p>
+
+          <ul className="mt-5 space-y-2 text-sm text-neutral-700">
+            <li>• Clear status: On track / Needs action / At risk</li>
+            <li>• One-tap actions: message, approve, nudge, accept</li>
+            <li>• Weekly Reports land as “ready” items (not chores)</li>
+          </ul>
+
+          <div className="mt-6">
+            <PrimaryButton onClick={onJoin}>Join the coach beta</PrimaryButton>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <CoachDeskPreview />
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+function CoachDeskPreview() {
+  const rows = [
+    {
+      name: 'Ava · powerlifting',
+      meta: 'Weekly report ready',
+      chip: { label: 'Ready', tone: 'emerald' as const },
+    },
+    {
+      name: 'Noah · gen strength',
+      meta: 'Upper days trending high RPE',
+      chip: { label: 'Needs action', tone: 'amber' as const },
+    },
+    {
+      name: 'Mia · return to sport',
+      meta: 'Missed 2 lower days',
+      chip: { label: 'At risk', tone: 'rose' as const },
+    },
+    {
+      name: 'Kai · physique',
+      meta: 'New DM: “hotel gym”',
+      chip: { label: 'DM', tone: 'violet' as const },
+    },
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-neutral-200">
+      <div className="flex items-center justify-between bg-neutral-50 px-4 py-3 text-xs text-neutral-600">
+        <span className="font-semibold text-neutral-900">Coach Desk</span>
+        <span>Today</span>
+      </div>
+      <div className="divide-y divide-neutral-200 bg-white">
+        {rows.map((r) => (
+          <div key={r.name} className="flex items-center justify-between gap-3 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-neutral-900">{r.name}</p>
+              <p className="text-xs text-neutral-600">{r.meta}</p>
+            </div>
+            <StatusChip label={r.chip.label} tone={r.chip.tone} />
+          </div>
+        ))}
+      </div>
+      <div className="bg-neutral-50 px-4 py-3 text-[11px] text-neutral-600">
+        One view: who needs action and whose week is ready to accept.
+      </div>
+    </div>
+  );
+}
+
+function StatusChip({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'emerald' | 'amber' | 'rose' | 'violet' | 'neutral';
+}) {
+  const styles: Record<typeof tone, string> = {
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-800',
+    rose: 'border-rose-200 bg-rose-50 text-rose-700',
+    violet: 'border-violet-200 bg-violet-50 text-violet-700',
+    neutral: 'border-neutral-200 bg-neutral-50 text-neutral-700',
+  };
+
+  return (
+    <span
+      className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles[tone]}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Switching: default stack + safe trial                                       */
+/* -------------------------------------------------------------------------- */
+
+function SwitchingSection() {
+  return (
+    <Band tone="soft" id="switching">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+          Default stack
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Keep Stripe, Calendly, docs and community.
+        </h2>
+        <p className="mt-3 text-sm text-neutral-600">
+          Lungeable is the training OS — not your full business OS. It only makes sense if it
+          plugs into how you already run your business.
+        </p>
+      </div>
+
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+            Today’s stack
+          </p>
+          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+            Sheets, DMs, Stripe, Loom, forms…
+          </h3>
+          <ul className="mt-3 space-y-1.5 text-sm text-neutral-700">
+            <li>• You already pay for it (or it’s free).</li>
+            <li>• You know all the hacks.</li>
+            <li>• Sunday still means 8–10 tabs and manual rewrites.</li>
+          </ul>
+        </div>
+
+        <div className="rounded-3xl border border-violet-200 bg-violet-50 p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-700">
+            With Lungeable
+          </p>
+          <h3 className="mt-2 text-sm font-semibold text-neutral-900">
+            Training OS that plugs into that stack
+          </h3>
+          <ul className="mt-3 space-y-1.5 text-sm text-neutral-800">
+            <li>• Keep billing, scheduling and community where they are.</li>
+            <li>• Use Lungeable for plans, logging, Pocket Coach, Weekly Reports.</li>
+            <li>• Weekly Report → Accept‑Week replaces manual rewrites.</li>
+          </ul>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-neutral-700 sm:grid-cols-3">
+            {['Stripe', 'Calendly', 'Google Docs', 'Notion', 'Loom', 'Discord'].map((tool) => (
+              <div
+                key={tool}
+                className="flex items-center justify-center rounded-full border border-violet-200 bg-white px-3 py-1.5"
+              >
+                {tool}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-10 rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-semibold text-neutral-900">Try it in shadow mode</p>
+        <p className="mt-1 text-sm text-neutral-600">
+          Most early coaches run Lungeable in parallel for 3–10 clients over 4 weeks, then decide
+          with real data.
+        </p>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <SwitchStep
+            title="1. Pick 3–10 clients"
+            body="Mirror their current split and constraints so week one feels familiar."
+          />
+          <SwitchStep
+            title="2. Run a 4‑week pilot"
+            body="Use Weekly Reports, Accept‑Week, and Pocket Coach for mid‑week chaos."
+          />
+          <SwitchStep
+            title="3. Decide with real data"
+            body="Compare hours spent and outcomes. If it doesn’t save time, don’t keep it."
+          />
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+function SwitchStep({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5">
+      <p className="text-sm font-semibold text-neutral-900">{title}</p>
+      <p className="mt-2 text-sm text-neutral-600">{body}</p>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Compare                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function CompareSection() {
+  return (
+    <Band id="compare" tone="default">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+          Compare
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Respectful trade‑offs, clear positioning.
+        </h2>
+        <p className="mt-3 text-sm text-neutral-600">
+          TrueCoach and Everfit are excellent all‑in‑one platforms. Lungeable is narrower on purpose:
+          it’s the training OS that makes weekly programming and check‑ins dramatically faster.
+        </p>
+      </div>
+
+      <div className="mt-8 overflow-x-auto rounded-3xl border border-neutral-200 bg-white shadow-sm">
+        <table className="min-w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-neutral-200 bg-neutral-50 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+              <th className="py-3 px-4">Tool</th>
+              <th className="py-3 px-4">Best for</th>
+              <th className="py-3 px-4">Core story</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-200">
+            <tr>
+              <td className="py-4 px-4 font-semibold text-neutral-900">TrueCoach</td>
+              <td className="py-4 px-4 text-neutral-700">
+                1:1 trainers who want simple program delivery and a familiar client app.
+              </td>
+              <td className="py-4 px-4 text-neutral-700">
+                Solid builder and app used by many coaches. You still edit most weeks manually.
+              </td>
+            </tr>
+            <tr>
+              <td className="py-4 px-4 font-semibold text-neutral-900">Everfit</td>
+              <td className="py-4 px-4 text-neutral-700">
+                Gyms and coaches who want an all‑in‑one business platform.
+              </td>
+              <td className="py-4 px-4 text-neutral-700">
+                Business OS with automations — great if you want one system for payments and content.
+              </td>
+            </tr>
+            <tr>
+              <td className="py-4 px-4 font-semibold text-neutral-900">MyCoach AI</td>
+              <td className="py-4 px-4 text-neutral-700">
+                Coaches who want workouts + nutrition automation inside one suite.
+              </td>
+              <td className="py-4 px-4 text-neutral-700">
+                All‑in‑one AI platform across messaging, workouts and nutrition.
+              </td>
+            </tr>
+            <tr className="bg-violet-50">
+              <td className="py-4 px-4 font-semibold text-neutral-900">Lungeable</td>
+              <td className="py-4 px-4 text-neutral-700">
+                Remote strength/physique coaches with 10–50 clients drowning in programming.
+              </td>
+              <td className="py-4 px-4 text-neutral-700">
+                Weekly Reports → Accept‑Week, Pocket Coach DM replans, and evidence‑based guardrails.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-xs text-neutral-500">
+        Honest note: If you want payments, habits, media libraries, marketing pages and full business workflows in one place, an all‑in‑one platform may fit better.
+      </p>
+    </Band>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pricing                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function PricingSection({ onJoin }: { onJoin: () => void }) {
+  return (
+    <Band id="pricing" tone="soft" containerClassName="max-w-5xl">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+          Pricing
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Simple while we’re in coach beta.
+        </h2>
+        <p className="mt-3 text-sm text-neutral-600">
+          If Lungeable doesn’t save you at least one check‑in’s worth of time each month,
+          you shouldn’t keep it.
+        </p>
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-neutral-500">
+            Founding coach plan
+          </p>
+          <div className="mt-3 flex items-baseline gap-1">
+            <span className="text-3xl font-semibold text-neutral-900">$39</span>
+            <span className="text-sm text-neutral-500">/month</span>
+          </div>
+          <p className="mt-1 text-xs text-neutral-500">
+            Up to 30 active online clients · price locked for life for early coaches.
+          </p>
+
+          <ul className="mt-4 space-y-2 text-sm text-neutral-800">
+            <li>• Weekly generator with evidence-based guardrails</li>
+            <li>• Pocket Coach chat for you and clients</li>
+            <li>• Weekly Reports → 1-tap Accept‑Week per client</li>
+            <li>• Coach Desk roster triage and client messaging</li>
+            <li>• Snap-to-Macro included when released</li>
+          </ul>
+
+          <PrimaryButton onClick={onJoin} className="mt-6 w-full justify-center">
+            Apply for early access
+          </PrimaryButton>
+        </div>
+
+        <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 text-sm text-neutral-700">
+          <p className="font-semibold text-neutral-900">Later, public tiers look like:</p>
+          <ul className="mt-3 space-y-1.5 text-sm">
+            <li>
+              • <span className="font-medium">Coach Start</span> — up to 10 clients, around
+              $29/mo
+            </li>
+            <li>
+              • <span className="font-medium">Coach Grow</span> — up to 25 clients, around
+              $59/mo
+            </li>
+            <li>
+              • <span className="font-medium">Coach Scale</span> — up to 50 clients, around
+              $99/mo
+            </li>
+          </ul>
+          <p className="mt-3 text-neutral-600">
+            Exact tiers may shift as we learn from early coaches. Founding coaches keep their
+            price.
+          </p>
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Results strip                                                              */
+/* -------------------------------------------------------------------------- */
+
+function ResultsStrip() {
+  return (
+    <Band tone="default" containerClassName="max-w-5xl">
+      <div className="grid gap-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:items-center">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+            Results
+          </p>
+          <h2 className="mt-3 text-xl font-semibold tracking-tight sm:text-2xl">
+            What “less Sunday hell” actually looks like.
+          </h2>
+          <p className="mt-3 text-sm text-neutral-600">
+            The goal is simple: cut your programming + check‑in time roughly in half without
+            lowering training quality.
+          </p>
+        </div>
+
+        <div className="grid gap-4 text-sm text-neutral-900 sm:grid-cols-2">
+          <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-5">
+            <p className="text-2xl font-semibold">~50%</p>
+            <p className="mt-1 text-xs text-neutral-600">
+              Target reduction in weekly programming + check‑in time after a 4‑week pilot.
+            </p>
+          </div>
+          <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-5">
+            <p className="text-2xl font-semibold">10–50</p>
+            <p className="mt-1 text-xs text-neutral-600">
+              Ideal online client range per coach where Weekly Report → Accept‑Week shines.
+            </p>
+          </div>
+        </div>
+      </div>
+    </Band>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Social proof                                                               */
+/* -------------------------------------------------------------------------- */
+
+function SocialProofSection() {
+  const quotes = [
+    {
+      quote:
+        '“Weekly Reports → Accept‑Week is the first workflow that actually feels like a coach’s tool, not a prettier spreadsheet.”',
+      by: 'Strength coach · 24 online clients',
+    },
+    {
+      quote:
+        '“Pocket Coach handles the stuff that usually derails a block — travel, time crunches, tweaks — without me rebuilding sessions.”',
+      by: 'Physique coach · 18 online clients',
+    },
+    {
+      quote:
+        '“The guardrails are the point. It keeps quality consistent when I’m moving fast.”',
+      by: 'Team coach · 3 coaches',
+    },
+  ];
+
+  return (
+    <Band tone="soft" containerClassName="max-w-6xl">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+          Proof
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Early coach feedback
+        </h2>
+        <p className="mt-3 text-sm text-neutral-600">
+          Replace these with real pilot quotes as soon as you have them. Specificity converts.
+        </p>
+      </div>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-3">
+        {quotes.map((q) => (
+          <div key={q.by} className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
+            <p className="text-sm text-neutral-800">{q.quote}</p>
+            <p className="mt-3 text-xs font-semibold text-neutral-900">{q.by}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-semibold text-neutral-900">Pilot story (template)</p>
+        <p className="mt-1 text-sm text-neutral-600">
+          “Before: 6–8 hours Sunday programming. After 4 weeks: ~3–4 hours using Weekly Reports +
+          Accept‑Week, with fewer missed sessions.”
+        </p>
+      </div>
+    </Band>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Join section (Supabase-backed coach sign-up form)                          */
+/* -------------------------------------------------------------------------- */
+
+function JoinSection() {
+  return (
+    <Band id="join" tone="default" containerClassName="max-w-4xl" className="safe-pb">
+      <div className="max-w-xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+          Coach beta
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Join the founding coach waitlist.
+        </h2>
+        <p className="mt-3 text-sm text-neutral-600">
+          Tell us a little about your coaching practice. We’ll onboard in small batches so we
+          can support you properly and tune around real workflows.
+        </p>
+      </div>
+
+      <div className="mt-6 rounded-3xl border border-neutral-200 bg-neutral-50 p-5 sm:p-6">
+        <CoachSignupForm />
+      </div>
+
+      <p className="mt-3 text-xs text-neutral-500">
+        We’ll never sell your data. You can ask to be removed at any time.
+      </p>
+    </Band>
+  );
+}
+
+type FormState = 'idle' | 'submitting' | 'success' | 'error';
+
+const inputBase =
+  'mt-1 w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none ring-0 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20';
+
+function CoachSignupForm() {
+  const [state, setState] = useState<FormState>('idle');
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (state === 'submitting' || state === 'success') return;
+
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Please enter a valid email.');
+      return;
+    }
+
+    setState('submitting');
+    setError(null);
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : undefined;
+    const ref = typeof document !== 'undefined' ? document.referrer || undefined : undefined;
+
+    const intents = formData.getAll('intent').map(String);
+
+    const payload = {
+      email: trimmedEmail,
+      name: (formData.get('name') || '')?.toString() || null,
+      primary_focus: (formData.get('focus') || '')?.toString() || null,
+      client_count: (formData.get('client_count') || '')?.toString() || null,
+      coach_intents: intents,
+      presence: (formData.get('presence') || '')?.toString() || null,
+      notes: (formData.get('notes') || '')?.toString() || null,
+      source: 'coach-landing',
+      site_version: SITE_VERSION,
+      user_agent: ua,
+      referer: ref,
+    };
+
+    try {
+      const { error: supaError } = await supabase.from('leads_coach_waitlist').insert(payload);
+
+      // 23505 = unique violation (email already exists). Treat as soft-success.
+      if (supaError && supaError.code !== '23505') {
+        // eslint-disable-next-line no-console
+        console.error('Supabase insert error', supaError);
+        setState('error');
+        setError('Something went wrong. Please refresh and try again, or email us directly.');
+        return;
+      }
+
+      setState('success');
+      setEmail('');
+      form.reset();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Supabase form submit error', err);
+      setState('error');
+      setError('Something went wrong. Please refresh and try again, or email us directly.');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4" aria-live="polite" noValidate>
+      <div className="space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+          Basics (required)
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm">
+            <span className="text-xs font-semibold text-neutral-700">
+              Name <span className="text-neutral-500">(or brand)</span>
+            </span>
+            <input
+              name="name"
+              required
+              autoComplete="name"
+              className={inputBase}
+              placeholder="Alex, Ava Strength, ..."
+            />
+          </label>
+
+          <label className="block text-sm">
+            <span className="text-xs font-semibold text-neutral-700">Email</span>
+            <input
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputBase}
+              placeholder="you@coaching.com"
+            />
+          </label>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm">
+            <span className="text-xs font-semibold text-neutral-700">Primary focus</span>
+            <select name="focus" className={inputBase} defaultValue="strength">
+              <option value="strength">Gen strength / hypertrophy</option>
+              <option value="powerlifting">Powerlifting</option>
+              <option value="olympic">Olympic weightlifting</option>
+              <option value="sport">Sport‑specific</option>
+              <option value="rehab">Return‑to‑sport / rehab</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+
+          <label className="block text-sm">
+            <span className="text-xs font-semibold text-neutral-700">Approx. online clients</span>
+            <select name="client_count" className={inputBase} defaultValue="10-25">
+              <option value="0-10">0–10</option>
+              <option value="10-25">10–25</option>
+              <option value="25-50">25–50</option>
+              <option value="50+">50+</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="space-y-3 pt-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+          Context (optional)
+        </p>
+
+        <label className="block text-sm">
+          <span className="text-xs font-semibold text-neutral-700">What do you want most?</span>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {['Save time', 'Safer progression', 'Scale my roster', 'Better client experience', 'Other'].map(
+              (label) => (
+                <label
+                  key={label}
+                  className="flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-800"
+                >
+                  <input type="checkbox" name="intent" value={label} className="accent-violet-600" />
+                  <span>{label}</span>
+                </label>
+              )
+            )}
+          </div>
+        </label>
+
+        <label className="block text-sm">
+          <span className="text-xs font-semibold text-neutral-700">
+            Where do you coach now? <span className="text-neutral-500">(links or handle)</span>
+          </span>
+          <input
+            name="presence"
+            className={inputBase}
+            placeholder="@yourhandle, site, TrueCoach, Sheets, ..."
+          />
+        </label>
+
+        <label className="block text-sm">
+          <span className="text-xs font-semibold text-neutral-700">
+            Anything else we should know? <span className="text-neutral-500">(optional)</span>
+          </span>
+          <textarea
+            name="notes"
+            rows={3}
+            className={inputBase}
+            placeholder="What’s hardest about programming or managing your roster right now?"
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <PrimaryButton
+          type="submit"
+          className="disabled:cursor-default disabled:opacity-60"
+        >
+          {state === 'submitting'
+            ? 'Submitting...'
+            : state === 'success'
+            ? 'You’re on the list'
+            : 'Join the coach waitlist'}
+        </PrimaryButton>
+        <p className="text-xs text-neutral-600">
+          We’ll email when spots open. Expect low‑volume, high‑signal updates only.
+        </p>
+      </div>
+
+      {error && (
+        <p className="toast-pop mt-2 text-xs text-rose-600" role="alert">
+          {error}
+        </p>
+      )}
+
+      {state === 'success' && (
+        <div className="toast-pop mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <p className="font-semibold">You’re in — what happens next?</p>
+          <p className="mt-1 text-sm text-emerald-800">
+            We onboard coaches in small cohorts, send a short intake before your slot, and share early
+            previews you can react to. No spam.
+          </p>
+        </div>
+      )}
+
+      {state === 'error' && !error && (
+        <p className="toast-pop mt-2 text-xs text-rose-600">
+          Something went wrong. Please refresh and try again, or email us directly.
+        </p>
+      )}
+    </form>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* FAQ                                                                        */
+/* -------------------------------------------------------------------------- */
+
+function FaqSection() {
+  const faqs: { q: string; a: string }[] = [
+    {
+      q: 'Do I have to move my payments into Lungeable?',
+      a: 'No. Keep Stripe, PayPal, Trainerize or whatever you use today. Lungeable runs your programming, logging and check-ins; it is not trying to replace your billing stack right now.',
+    },
+    {
+      q: 'Is this trying to replace me as a coach?',
+      a: 'No. Lungeable enforces your rules — volume ceilings, SRA spacing, injuries — and proposes weeks and session tweaks. You still decide what to run and when to override.',
+    },
+    {
+      q: 'What if a generated plan looks off?',
+      a: 'Every plan flows through the same guardrails for time fit, exposures and injury rules, and you always review it. If something looks wrong, you can tweak or reject it before clients ever see it.',
+    },
+    {
+      q: 'Can I test this with just a few clients?',
+      a: 'Yes. Most early coaches start with 3–10 clients, often in “shadow mode” alongside their existing stack, then roll in more once they trust the loop.',
+    },
+    {
+      q: 'Who is Lungeable for, exactly?',
+      a: 'Remote strength and physique coaches with roughly 10–50 online clients who are currently stuck in Sheets, TrueCoach, Trainerize or Everfit and tired of Sunday programming hell.',
+    },
+  ];
+
+  return (
+    <Band id="faq" tone="default" containerClassName="max-w-4xl">
+      <div className="max-w-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">
+          FAQ
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Questions coaches actually ask.
+        </h2>
+        <p className="mt-3 text-sm text-neutral-600">
+          If you’re already on TrueCoach, Everfit or Sheets, you’re not crazy to be skeptical.
+          Here’s how Lungeable fits alongside what you use now.
+        </p>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        {faqs.map((item) => (
+          <details
+            key={item.q}
+            className="group rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-4"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-neutral-900">
+              <span>{item.q}</span>
+              <span
+                aria-hidden
+                className="text-xs text-neutral-500 transition-transform group-open:rotate-180"
+              >
+                ▾
+              </span>
+            </summary>
+            <p className="mt-2 text-sm text-neutral-700">{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </Band>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Footer                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function Footer() {
+  return (
+    <footer className="border-t border-neutral-200 bg-white">
+      <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-xs text-neutral-600 sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          Built by <span className="font-semibold text-neutral-900">Xuru Ren</span> — founder &amp;
+          solo developer of Lungeable.
+        </p>
+        <a
+          href="https://www.linkedin.com/in/xuru-ren-lungeablefounder"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs font-medium text-neutral-700 hover:text-neutral-900"
+        >
+          <span>Connect on LinkedIn</span>
+          <span aria-hidden>↗</span>
+        </a>
+      </div>
+    </footer>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mobile sticky CTA                                                          */
+/* -------------------------------------------------------------------------- */
+
+function MobileBottomCta({ onJoin }: { onJoin: () => void }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-4 sm:hidden">
+      <button
+        type="button"
+        onClick={onJoin}
+        className="pointer-events-auto inline-flex w-full max-w-md items-center justify-between rounded-full border border-neutral-200 bg-white/95 px-4 py-2 text-sm font-semibold text-neutral-900 shadow-lg"
+      >
+        <span>Join coach beta</span>
+        <span className="text-xs text-neutral-600">2–3 min form →</span>
+      </button>
     </div>
   );
 }

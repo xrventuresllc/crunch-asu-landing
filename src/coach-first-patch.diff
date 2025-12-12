@@ -1,0 +1,218 @@
+--- a/App.tsx
++++ b/App.tsx
+@@ -38,7 +38,7 @@
+ const LINKEDIN_URL = 'https://www.linkedin.com/in/xuru-ren-lungeablefounder';
+ 
+ // Site/version tag for analytics/debug
+-const SITE_VERSION = '2025-11-10-prelaunch';
++const SITE_VERSION = '2025-11-18-coach-first';
+ const FREE_DAYS = parseInt((import.meta.env.VITE_FREE_DAYS as string) || '30', 10);
+ 
+ // Reps / Gamification
+@@ -173,7 +173,7 @@
+ 
+   // Title
+   useEffect(() => {
+-    document.title = 'Lungeable — Train first. A pocket personal coach you can text.';
++    document.title = 'Lungeable — Program weeks in minutes. Adjust in seconds.';
+   }, []);
+ 
+   // UI state
+@@ -624,13 +624,14 @@
+             </div>
+ 
+             <h1 className="mt-3 text-4xl md:text-5xl font-extrabold leading-tight text-balance">
+-              Train first. A pocket personal coach you can text.
++              Program weeks in minutes. Adjust in seconds.
+             </h1>
++
++            <p className="mt-2 text-sm text-neutral-400">Program less. Coach more.</p>
+ 
+             {/* Simplified subhead */}
+             <p className="mt-4 text-neutral-300 max-w-xl">
+-              AI workouts that adapt to your goal, schedule and equipment. Text the <b>Pocket Coach</b> to adjust
+-              on the fly; weekly reports tune your next week.
++              Lungeable is an adaptive training OS for remote coaches and their athletes. It auto‑generates weekly plans, turns check‑ins into <b>Weekly Reports</b>, and lets you approve high‑quality adjustments in a few taps. Less Sunday spreadsheet hell, more coaching.
+             </p>
+ 
+             <div className="mt-8 flex items-center gap-3">
+@@ -677,7 +678,7 @@
+             <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900/70 p-4">
+               <div className="text-xs text-neutral-400 mb-2">Pocket Coach</div>
+               <ChatBubble who="you" text="Only 25 minutes today." />
+-              <ChatBubble who="coach" text="Kept anchors, trimmed accessory, tightened rests. Ready?" />
++              <ChatBubble who="coach" text="Kept anchors, trimmed accessory, tightened rests. Ready to approve?" />
+               <div className="mt-2 text-right">
+                 <span className="inline-block rounded-lg border border-violet-600/40 bg-violet-500/10 px-3 py-1 text-xs text-violet-300">
+                   One‑tap Accept‑Week
+@@ -695,22 +696,22 @@
+         {/* Mobile accordion */}
+         <div className="mt-4 md:hidden space-y-2">
+           <AccordionItem summary="Generate → Accept">
+-            One tap creates your week from goal, time, equipment, and injuries. Start today.
++            Onboard a client, set goal/time/equipment/injuries (Everyday or Athlete Mode). Lungeable proposes their week; you review and Accept‑Week.
+           </AccordionItem>
+           <AccordionItem summary="Train & log fast">
+-            One‑thumb set done with optional RIR/RPE; clear “Next Up” keeps you moving.
++            Client trains and logs fast. Data feeds your Weekly Report.
+           </AccordionItem>
+           <AccordionItem summary="Text your coach">
+-            “Busy.” “Knee tweak.” “Hotel gym.” One message; Lungeable adjusts and preserves quality.
++            Pocket Coach handles pain, travel, or time crunch—quality preserved; you can approve or tweak.
+           </AccordionItem>
+         </div>
+ 
+         {/* Desktop: three cards */}
+         <div className="mt-6 hidden md:grid md:grid-cols-3 gap-6">
+           {[
+-            { t: 'Generate → Accept', d: 'One tap creates your week from goal, time, equipment, and injuries. Start today.' },
+-            { t: 'Train & log fast', d: 'One‑thumb set done with optional RIR/RPE; clear “Next Up” keeps you moving.' },
+-            { t: 'Text your coach', d: '“Busy.” “Knee tweak.” “Hotel gym.” One message; Lungeable adjusts and preserves quality.' },
++            { t: 'Generate → Accept', d: 'Onboard a client, set goal/time/equipment/injuries (Everyday or Athlete Mode). Lungeable proposes their week; you review and Accept‑Week.' },
++            { t: 'Train & log fast', d: 'Client trains and logs fast. Data feeds your Weekly Report.' },
++            { t: 'Text your coach', d: 'Pocket Coach handles pain, travel, or time crunch—quality preserved; you can approve or tweak.' },
+           ].map((i) => (
+             <div key={i.t} className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
+               <h4 className="font-semibold">{i.t}</h4>
+@@ -752,34 +753,29 @@
+         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
+           <h3 className="text-2xl font-bold">Why Lungeable</h3>
+           <ul className="mt-4 grid md:grid-cols-2 gap-3 text-sm text-neutral-300">
+-            <li>• <b>Less planning, more training</b>: Accept‑Week, instant Pocket Coach edits, fast logging.</li>
+-            <li>• <b>Scientifically sound</b>: SRA spacing, RPE caps, weekly set ceilings, injury filters, auto‑deload.</li>
+-            <li>• <b>Actually helpful</b>: Text constraints; session adjusts without losing quality.</li>
+-            <li>• <b>Weekly Report → Accept‑Week</b>: progress rolled straight into next week.</li>
+-            <li>• <b>Athlete Mode</b>: sport/position presets; in/off‑season; practice‑aware caps.</li>
+-            <li>• <b>Snap‑to‑Macro</b> (WIP): quick, approximate daily macros — optional and lightweight.</li>
++            <li>• <b>Efficiency layer</b>: one‑tap Accept‑Week from Weekly Report, instant Pocket Coach edits, fast logging.</li>
++            <li>• <b>Science layer</b>: evidence‑based guardrails — SRA spacing, RPE caps, weekly set ceilings, exposure budgets, injury filters, auto‑deload.</li>
++            <li>• <b>Pocket Coach</b>: Text constraints; session adjusts without blowing up your progression.</li>
++            <li>• <b>Weekly Report → Accept‑Week</b>: tuned recommendations auto‑populate next week; approve in a click.</li>
++            <li>• <b>Athlete Mode</b>: sport/position presets; in/off‑season toggles; practice‑aware scheduling and exposure caps.</li>
++            <li>• <b>Snap‑to‑Macro</b> (in development): photo → approximate daily P/C/F & calories — optional and lightweight.</li>
+           </ul>
+         </div>
+       </section>
+ 
++      
+       {/* Who it's for + Coach/Trainer */}
+       <section id="coach" className="mx-auto max-w-6xl px-4 pb-8 grid lg:grid-cols-3 gap-6">
+         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
+-          <h4 className="font-semibold text-white">For everyone</h4>
+-          Plans tailored to your goal, time, equipment, and injuries. No guesswork.
+-        </div>
+-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
+-          <h4 className="font-semibold text-white">Athlete Mode</h4>
+-          Sport & position presets, in/off‑season toggles, practice‑aware scheduling.
++          <h4 className="font-semibold text-white">Coach/Trainer Pro</h4>
++          Assign templates & AI-assisted plans, track adherence, send proposals & nudges, and manage cohorts or 1:1 — in the same product your athletes use to train.
+           <ul className="mt-2 list-disc list-inside text-xs text-neutral-400">
+-            <li>Soccer—Winger: repeat sprints, COD plyos, ham pre‑hab; taper.</li>
+-            <li>Basketball—Guard: accel/decel control, tendon care; taper.</li>
+-            <li>Volleyball—Setter/OH: jump‑contact budgets; landing mechanics.</li>
++            <li>DM proposals with one-tap Accept</li>
++            <li>Individualized assignments (injury-aware)</li>
++            <li>Schedule & workout builder, templates</li>
++            <li>Adherence dashboards & progress-aware nudges</li>
++            <li>Quality guardrails: SRA, RPE caps, set ceilings, auto-deload</li>
+           </ul>
+-        </div>
+-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
+-          <h4 className="font-semibold text-white">Coach/Trainer Pro</h4>
+-          DM proposals, individualized assignments, schedule/workout builder, adherence & nudges.
+           <label className="mt-3 flex items-center gap-2">
+             <input
+               type="checkbox"
+@@ -790,7 +786,23 @@
+             I’m a coach / trainer <span className="text-neutral-400">(separate list)</span>
+           </label>
+         </div>
++
++        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
++          <h4 className="font-semibold text-white">For athletes & self-coached</h4>
++          Plans tailored to goal, time, equipment, and injuries — with the same quality guardrails.
++        </div>
++
++        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 text-sm text-neutral-300">
++          <h4 className="font-semibold text-white">Athlete Mode</h4>
++          Sport & position presets, in/off‑season toggles, practice‑aware scheduling & exposure caps.
++          <ul className="mt-2 list-disc list-inside text-xs text-neutral-400">
++            <li>Soccer — Winger: repeat sprints, COD plyos, ham pre‑hab; taper.</li>
++            <li>Basketball — Guard: accel/decel control, tendon care; taper.</li>
++            <li>Volleyball — Setter/OH: jump‑contact budgets; landing mechanics.</li>
++          </ul>
++        </div>
+       </section>
++    
+ 
+       {/* Join form */}
+       <section id="join" className="mx-auto max-w-6xl px-4 pb-16">
+
+--- a/WeekOneGlance.tsx
++++ b/WeekOneGlance.tsx
+@@ -54,10 +54,9 @@
+ 
+   return (
+     <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
+-      <h3 className="text-xl font-semibold">Week 1 — what you’ll get</h3>
++      <h3 className="text-xl font-semibold">Week 1 — what your client sees</h3>
+       <p className="mt-1 text-sm text-neutral-300">
+-        Pick goal, time & equipment. Lungeable drafts a safe, effective week with science guardrails
+-        (SRA spacing, RPE caps, weekly set ceilings) — without heavy setup.
++        Pick goal, time & equipment. Lungeable drafts a safe, effective week with evidence‑based guardrails (SRA spacing, RPE caps, weekly set ceilings, exposure budgets) — no heavy setup. Coaches review and Accept‑Week.
+       </p>
+ 
+       {/* Quick setup controls (clear section labels) */}
+@@ -144,7 +143,7 @@
+ 
+         <ul className="mt-3 grid sm:grid-cols-2 gap-2 text-sm text-neutral-300">
+           <li>• Accept‑Week plan (~{estSessions} sessions)</li>
+-          <li>• Pocket Coach ready — text to adjust</li>
++          <li>• Pocket Coach ready — client texts, you approve</li>
+           <li>• Safe progression (SRA/RPE/sets)</li>
+           <li>• Hotel‑gym friendly swaps</li>
+         </ul>
+@@ -162,7 +161,7 @@
+         </div>
+       </div>
+ 
+-      <p className="mt-2 text-xs text-neutral-500">Switch goal/minutes/equipment to see how Lungeable adapts the week.</p>
++      <p className="mt-2 text-xs text-neutral-500">Switch goal/minutes/equipment to see how Lungeable adapts. Your Weekly Report will tune next week automatically.</p>
+     </div>
+   );
+ }
+
+--- a/DMSimulator.tsx
++++ b/DMSimulator.tsx
+@@ -10,17 +10,17 @@
+     busy: [
+       { from: 'you', text: 'Only 25 minutes today.' },
+       { from: 'coach', text: 'Keeping anchors. Trimming accessories. Tightening rests and pairing supersets.' },
+-      { from: 'coach', text: 'Quality preserved. You’ll still hit exposure targets.' },
++      { from: 'coach', text: 'Quality preserved. You’ll still hit exposure targets — ready to approve?' },
+     ],
+     knee: [
+       { from: 'you', text: 'Right knee aches—avoid deep flexion.' },
+       { from: 'coach', text: 'Swapping to ROM‑friendly patterns, tempo tweak, lower plyo volume.' },
+-      { from: 'coach', text: 'SRA spacing protected. We keep the plan safe & effective.' },
++      { from: 'coach', text: 'SRA spacing protected. Plan stays safe & effective — ready to approve?' },
+     ],
+     hotel: [
+       { from: 'you', text: 'Hotel gym — no bench.' },
+       { from: 'coach', text: 'Switching to DB/landmine variants. Weekly pressing exposure maintained.' },
+-      { from: 'coach', text: 'You’re set. Let’s train.' },
++      { from: 'coach', text: 'Variants swapped in. Weekly pressing exposure maintained — ready to approve?' },
+     ],
+   };
+ 
+@@ -42,8 +42,8 @@
+ 
+   return (
+     <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
+-      <h3 className="text-xl font-semibold">Text the coach — Lungeable fixes it fast</h3>
+-      <p className="mt-1 text-sm text-neutral-300">Natural‑language replans while preserving training quality.</p>
++      <h3 className="text-xl font-semibold">Pocket Coach — replan via chat</h3>
++      <p className="mt-1 text-sm text-neutral-300">Natural‑language replans that preserve anchors & exposure budgets. Clients and coaches can both trigger changes; coaches approve week‑level updates.</p>
+ 
+       <div className="mt-4 grid sm:grid-cols-3 gap-3">
+         <button

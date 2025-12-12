@@ -13,10 +13,10 @@ import './App.css';
 type AppError = { message: string; stack?: string };
 
 function normalizeError(e: unknown): AppError {
-  // Prefer promise rejection .reason, then event.error, then the value itself
   const errLike: any =
-    (e && typeof e === 'object' && ('reason' in (e as any) ? (e as any).reason : (e as any).error)) ??
-    e;
+    (e &&
+      typeof e === 'object' &&
+      ('reason' in (e as any) ? (e as any).reason : (e as any).error)) ?? e;
 
   if (errLike instanceof Error) {
     return { message: errLike.message, stack: errLike.stack };
@@ -31,11 +31,23 @@ function normalizeError(e: unknown): AppError {
   }
 }
 
+function migrateErrorKey() {
+  try {
+    const legacy = sessionStorage.getItem('cr_last_error');
+    if (legacy && !sessionStorage.getItem('ln_last_error')) {
+      sessionStorage.setItem('ln_last_error', legacy);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function installGlobalErrorHooks() {
+  migrateErrorKey();
   const push = (evt: any) => {
     try {
       const err = normalizeError(evt);
-      sessionStorage.setItem('cr_last_error', JSON.stringify(err));
+      sessionStorage.setItem('ln_last_error', JSON.stringify(err));
       // eslint-disable-next-line no-console
       console.error('[GlobalError]', err);
     } catch {
@@ -60,8 +72,8 @@ function CrashScreen({ error }: { error: AppError }) {
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        background: '#0a0a0a',
-        color: '#e5e5e5',
+        background: 'var(--bg)',
+        color: 'var(--fg)',
         padding: '24px',
         textAlign: 'center',
       }}
@@ -77,11 +89,11 @@ function CrashScreen({ error }: { error: AppError }) {
             onClick={() => location.reload()}
             style={{
               borderRadius: 12,
-              background: '#6366f1',
-              color: '#0a0a0a',
+              background: '#7c3aed',
+              color: '#ffffff',
               padding: '10px 16px',
               fontWeight: 700,
-              border: '1px solid #4f46e5',
+              border: '1px solid #6d28d9',
               cursor: 'pointer',
             }}
           >
@@ -92,10 +104,10 @@ function CrashScreen({ error }: { error: AppError }) {
             style={{
               borderRadius: 12,
               background: 'transparent',
-              color: '#e5e5e5',
+              color: 'var(--fg)',
               padding: '10px 16px',
               fontWeight: 700,
-              border: '1px solid #2f2f2f',
+              border: '1px solid rgba(0,0,0,0.18)',
               cursor: 'pointer',
             }}
           >
@@ -109,9 +121,9 @@ function CrashScreen({ error }: { error: AppError }) {
               marginTop: 16,
               textAlign: 'left',
               whiteSpace: 'pre-wrap',
-              background: '#111',
-              border: '1px solid #262626',
-              color: '#ddd',
+              background: 'rgba(0,0,0,0.04)',
+              border: '1px solid rgba(0,0,0,0.12)',
+              color: 'var(--fg)',
               padding: 16,
               borderRadius: 12,
               overflow: 'auto',
@@ -148,7 +160,7 @@ class ErrorBoundary extends React.Component<
     // eslint-disable-next-line no-console
     console.error('App crashed:', normalized, info);
     try {
-      sessionStorage.setItem('cr_last_error', JSON.stringify(normalized));
+      sessionStorage.setItem('ln_last_error', JSON.stringify(normalized));
     } catch {
       /* ignore */
     }

@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  // We use a dark UI by design; no dark: variants needed, but keep media for future use
+  // Use media-based dark mode support if you later add dark: variants.
   darkMode: 'media',
   content: [
     './index.html',
@@ -15,14 +15,24 @@ export default {
       screens: { '2xl': '1280px' },
     },
     extend: {
-      // Optional brand aliases if you want to reference them later (not required by current code)
+      // Allow min-h-12 (3rem ~ 48px) for larger tap targets
+      minHeight: {
+        12: '3rem',  // enables class: min-h-12
+        tap: '44px', // optional alias: min-h-tap (Apple HIG minimum)
+      },
+      // Brand aliases — marketing site uses violet as primary accent
       colors: {
         brand: {
-          DEFAULT: '#6366f1', // indigo-500
-          strong: '#4f46e5',  // indigo-600
-          warm: '#f97316',    // orange-500
-          mint: '#34d399',    // emerald-ish / mint
+          DEFAULT: '#7c3aed', // violet-600
+          soft: '#a78bfa',    // violet-300/400
+          strong: '#4c1d95',  // deep violet
         },
+      },
+      fontSize: {
+        'display-1': ['3.5rem', { lineHeight: '1.1' }],
+        h2: ['2.25rem', { lineHeight: '1.2' }],
+        h3: ['1.5rem', { lineHeight: '1.3' }],
+        body: ['0.9375rem', { lineHeight: '1.6' }],
       },
       // Small animation used by milestone toasts (mirrors App.css if you prefer class-based usage)
       keyframes: {
@@ -35,9 +45,8 @@ export default {
         'toast-pop': 'toast-pop 0.24s ease-out both',
       },
       boxShadow: {
-        'brand': '0 10px 25px -10px rgba(99, 102, 241, 0.45)',
+        brand: '0 10px 25px -10px rgba(124, 58, 237, 0.45)', // violet tint
       },
-      // You can also add custom radii, if desired:
       borderRadius: {
         '2xl': '1rem',
       },

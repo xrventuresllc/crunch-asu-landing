@@ -6,17 +6,17 @@
 /* --------- Light base polish (non-invasive) --------- */
 
 :root {
-  /* The app is primarily dark; hint browsers for better rendering */
-  color-scheme: dark;
+  /* Marketing defaults to light/neutral (Apple-ish). */
+  color-scheme: light;
 
   /* Core palette */
-  --bg: #0a0a0a;
-  --fg: #e5e5e5;
-  --muted: #9ca3af;         /* neutral-400-ish */
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --muted: #525252;         /* neutral-600-ish */
 
-  /* Accents (indigo primary; warm secondary available if needed) */
-  --accent: #6366f1;        /* indigo-500 */
-  --accent-warm: #f97316;   /* orange-500 */
+  /* Accents — brand primary + warm momentum accent */
+  --accent: #7c3aed;        /* grape/violet-600 */
+  --accent-warm: #f59e0b;   /* tangerine/amber-500 */
 }
 
 /* Smooth anchors (e.g., header CTA → join form) */
@@ -38,14 +38,15 @@ html, body, #root { min-height: 100%; }
 body {
   background: var(--bg);
   color: var(--fg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Selection color that matches your indigo accent */
+/* Selection color that matches the violet accent */
 ::selection {
-  background: rgba(99, 102, 241, 0.35); /* indigo-500 @ 35% */
-  color: #fff;
+  background: rgba(124, 58, 237, 0.18); /* violet-600 @ 18% */
+  color: var(--fg);
 }
 
 /* Keep link styling minimal; Tailwind handles hover states in components */
@@ -60,4 +61,27 @@ a { text-decoration: inherit; }
 /* Prevent iOS font-size adjustments on rotation */
 html {
   -webkit-text-size-adjust: 100%;
+}
+
+/* --- Mobile-first helpers (small, optional) --- */
+@supports (text-wrap: balance) {
+  .text-balance { text-wrap: balance; }
+}
+
+/* Optional readable line lengths */
+.measure-tight { max-width: 22ch; }  /* great for hero <h1> */
+.measure       { max-width: 40ch; }  /* nice for short intros */
+
+/* iOS/Android safe-area helpers for sticky bars & footers */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-pt { padding-top: max(0px, var(--safe-top)); }
+.safe-pb { padding-bottom: max(0px, var(--safe-bottom)); }
+
+/* Defer rendering for below-the-fold sections (speeds up first paint) */
+.cv-auto { content-visibility: auto; }
+@supports (content-visibility: auto) {
+  .cv-auto { contain-intrinsic-size: 1px 800px; } /* rough height to avoid jumps */
 }

@@ -7,20 +7,21 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
 
-    <!-- Official pre-launch -->
-    <title>Crunch — Train first. A pocket personal coach you can text.</title>
+    <!-- Coach-first pre-launch -->
+    <title>Lungeable — Adaptive training OS for online strength coaches</title>
     <meta
       name="description"
-      content="With one tap, Crunch builds workouts around your goals, time, equipment, and injuries. Text the Pocket Coach to adjust any session. Weekly Reports learn and tune your plan. Snap‑to‑Macro is in development. Join the waitlist for free early access."
+      content="Lungeable helps online strength & sport coaches draft safe, effective week plans in minutes, replan from client DMs with Pocket Coach, and tune next week from Weekly Reports. Join the founding coach waitlist for early access."
     />
 
     <!-- Favicons -->
-    <link rel="icon" href="/crunch-logo.png" type="image/png" />
-    <link rel="shortcut icon" href="/crunch-logo.png" type="image/png" />
+    <link rel="icon" href="/Lungeable%20Logo.png" type="image/png" />
+    <link rel="shortcut icon" href="/Lungeable%20Logo.png" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Theming -->
-    <meta name="theme-color" content="#4F46E5" /> <!-- indigo-600 -->
+    <!-- Match the violet accent used in the UI -->
+    <meta name="theme-color" content="#7c3aed" />
     <meta name="color-scheme" content="dark light" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -36,47 +37,66 @@
     <!-- Optional: if you know your Supabase project host, add it here -->
     <!-- <link rel="preconnect" href="https://YOUR-PROJECT.supabase.co" /> -->
 
-    <!-- Open Graph / Twitter -->
-    <meta property="og:site_name" content="Crunch" />
-    <meta property="og:title" content="Crunch — Train first. A pocket personal coach you can text." />
-    <meta property="og:description" content="One tap builds workouts around your goals, time, equipment, and injuries. Text the Pocket Coach to adjust any session. Weekly Reports learn and tune your plan. Join the waitlist for free early access." />
+    <!-- Open Graph / Twitter (coach-first messaging) -->
+    <meta property="og:site_name" content="Lungeable" />
+    <meta
+      property="og:title"
+      content="Lungeable — Adaptive training OS for online strength coaches"
+    />
+    <meta
+      property="og:description"
+      content="Draft week plans in minutes, replan via Pocket Coach from client DMs, and tune next week from Weekly Reports. Built for online & hybrid strength coaches."
+    />
     <meta property="og:type" content="website" />
     <!-- If you have a final URL, set it here -->
     <!-- <meta property="og:url" content="https://YOUR-DOMAIN/" /> -->
     <!-- Replace with /og.png (1200x630) when ready -->
-    <meta property="og:image" content="/crunch-logo.png" />
+    <meta property="og:image" content="/Lungeable%20Logo.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Crunch — Train first. A pocket personal coach you can text." />
+    <meta
+      property="og:image:alt"
+      content="Lungeable — Adaptive training OS for online strength coaches."
+    />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Crunch — Train first. A pocket personal coach you can text." />
-    <meta name="twitter:description" content="One tap builds workouts around your goals, time, equipment, and injuries. Text the Pocket Coach to adjust any session. Weekly Reports learn and tune your plan." />
-    <meta name="twitter:image" content="/crunch-logo.png" />
+    <meta
+      name="twitter:title"
+      content="Lungeable — Adaptive training OS for online strength coaches"
+    />
+    <meta
+      name="twitter:description"
+      content="Ship programming in minutes, not midnight. Lungeable drafts week plans, updates from client DMs, and rolls everything into Weekly Reports so you can coach more and admin less."
+    />
+    <meta name="twitter:image" content="/Lungeable%20Logo.png" />
 
-    <!-- Structured data -->
+    <!-- Structured data (keep App, but tilt description toward coaches) -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        "name": "Crunch",
+        "name": "Lungeable",
         "applicationCategory": "HealthAndFitnessApplication",
         "operatingSystem": "iOS, Android, Web",
-        "description": "Training-first coach with one-tap plans built around your goals, Pocket Coach chat adjustments, and Weekly Reports that tune your plan. Snap-to-Macro is in development.",
+        "description": "Adaptive training OS for online & hybrid strength coaches. Generate safe, evidence-based week plans from constraints, replan via Pocket Coach from client messages, and tune training with Weekly Reports.",
         "url": "/",
         "publisher": {
           "@type": "Organization",
-          "name": "Crunch"
+          "name": "Lungeable"
+        },
+        "audience": {
+          "@type": "Audience",
+          "audienceType": "Strength and sport coaches"
         },
         "sameAs": [
-          "https://www.linkedin.com/in/xuru-ren-crunchfounder"
+          "www.linkedin.com/in/xuru-ren-lungeablefounder"
         ]
       }
     </script>
 
-    <!-- Analytics (Plausible) — dynamic loader uses current hostname) -->
+    <!-- Analytics (Plausible) — dynamic loader uses current hostname -->
     <script>
-      (function(d) {
+      (function (d) {
         var s = d.createElement('script');
         s.defer = true;
         s.src = 'https://plausible.io/js/script.js';
@@ -89,14 +109,14 @@
     <!-- <link rel="preload" href="/fonts/YourFont.woff2" as="font" type="font/woff2" crossorigin> -->
   </head>
   <body>
-    <!-- Accessible skip link (visible on keyboard focus) -->
+    <!-- Accessible skip link (visible on keyboard focus, jumps to coach join form) -->
     <a
       href="#join"
       style="
         position: absolute;
         left: -9999px;
         top: 0;
-        background: #6366f1; /* indigo-500 */
+        background: #7c3aed; /* violet-600 */
         color: #0a0a0a;
         padding: 6px 10px;
         border-radius: 8px;
@@ -105,7 +125,7 @@
       onfocus="this.style.left='12px'"
       onblur="this.style.left='-9999px'"
     >
-      Skip to join form
+      Skip to coach join form
     </a>
 
     <div id="root"></div>
@@ -114,8 +134,19 @@
     <script type="module" src="/src/main.tsx"></script>
 
     <noscript>
-      <div style="max-width:680px;margin:24px auto;padding:12px 16px;border:1px solid #262626;border-radius:8px;color:#e5e5e5;background:#0a0a0a;">
-        Crunch needs JavaScript enabled to run. Please enable JavaScript and reload.
+      <div
+        style="
+          max-width: 680px;
+          margin: 24px auto;
+          padding: 12px 16px;
+          border: 1px solid #262626;
+          border-radius: 8px;
+          color: #e5e5e5;
+          background: #0a0a0a;
+        "
+      >
+        Lungeable needs JavaScript enabled to run. Please enable JavaScript and
+        reload.
       </div>
     </noscript>
   </body>
