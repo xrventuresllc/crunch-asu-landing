@@ -12,7 +12,7 @@ export default function WeekOneGlance({
   seedGoal?: Goal | '';
   seedMinutes?: number;
   seedEquipment?: string[];
-  onJoin: () => void;
+  onJoin?: () => void;
 }) {
   const [goal, setGoal] = useState<Goal>((seedGoal as Goal) || 'build');
   const [minutes, setMinutes] = useState<number>(
@@ -118,7 +118,7 @@ export default function WeekOneGlance({
                   aria-pressed={selected}
                   className={`min-h-[44px] rounded-full border px-3 py-2 text-sm ${
                     selected
-                      ? 'border-violet-600/40 bg-violet-500/10 text-violet-300'
+                      ? 'border-white/25 bg-white/10 text-white'
                       : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
                   }`}
                 >
@@ -142,7 +142,7 @@ export default function WeekOneGlance({
                   aria-pressed={selected}
                   className={`min-h-[44px] rounded-full border px-3 py-2 text-sm ${
                     selected
-                      ? 'border-violet-600/40 bg-violet-500/10 text-violet-300'
+                      ? 'border-white/25 bg-white/10 text-white'
                       : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
                   }`}
                 >
@@ -180,18 +180,24 @@ export default function WeekOneGlance({
           <li>• Safe progression (SRA/RPE/sets)</li>
           <li>• Hotel‑gym friendly swaps</li>
         </ul>
-
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            onClick={onJoin}
-            className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-black shadow-sm hover:bg-neutral-100"
-          >
-            Reserve my spot
-          </button>
-          <span className="text-xs text-neutral-500">
-            Illustrative — your real plan adapts weekly with Pocket Coach &amp; Weekly Report.
-          </span>
-        </div>
+        {onJoin ? (
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onJoin}
+              className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-black shadow-sm hover:bg-neutral-100"
+            >
+              Reserve my spot
+            </button>
+            <span className="text-xs text-neutral-500">
+              Illustrative — your real plan adapts weekly with Pocket Coach &amp; Weekly Report.
+            </span>
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-neutral-500">
+            Illustrative — coaches review the draft and Accept‑Week.
+          </p>
+        )}
       </div>
 
       <p className="mt-2 text-xs text-neutral-500">

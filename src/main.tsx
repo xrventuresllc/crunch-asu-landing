@@ -72,8 +72,8 @@ function CrashScreen({ error }: { error: AppError }) {
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        background: 'var(--bg)',
-        color: 'var(--fg)',
+        background: '#F5F5F7',
+        color: '#111111',
         padding: '24px',
         textAlign: 'center',
       }}
@@ -89,11 +89,11 @@ function CrashScreen({ error }: { error: AppError }) {
             onClick={() => location.reload()}
             style={{
               borderRadius: 12,
-              background: '#7c3aed',
+              background: '#111111',
               color: '#ffffff',
               padding: '10px 16px',
               fontWeight: 700,
-              border: '1px solid #6d28d9',
+              border: '1px solid #111111',
               cursor: 'pointer',
             }}
           >
@@ -103,11 +103,11 @@ function CrashScreen({ error }: { error: AppError }) {
             onClick={() => setShowDetails((s) => !s)}
             style={{
               borderRadius: 12,
-              background: 'transparent',
-              color: 'var(--fg)',
+              background: '#ffffff',
+              color: '#111111',
               padding: '10px 16px',
               fontWeight: 700,
-              border: '1px solid rgba(0,0,0,0.18)',
+              border: '1px solid #E5E7EB',
               cursor: 'pointer',
             }}
           >
@@ -121,9 +121,9 @@ function CrashScreen({ error }: { error: AppError }) {
               marginTop: 16,
               textAlign: 'left',
               whiteSpace: 'pre-wrap',
-              background: 'rgba(0,0,0,0.04)',
-              border: '1px solid rgba(0,0,0,0.12)',
-              color: 'var(--fg)',
+              background: '#ffffff',
+              border: '1px solid #E5E7EB',
+              color: '#111111',
               padding: 16,
               borderRadius: 12,
               overflow: 'auto',

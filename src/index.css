@@ -3,20 +3,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --------- Light base polish (non-invasive) --------- */
+/* --------- "Ink & Paper" base polish (Apple-clean, black/white first) --------- */
 
 :root {
-  /* Marketing defaults to light/neutral (Apple-ish). */
+  /* Default marketing surface is light. */
   color-scheme: light;
 
-  /* Core palette */
-  --bg: #ffffff;
-  --fg: #0a0a0a;
-  --muted: #525252;         /* neutral-600-ish */
-
-  /* Accents — brand primary + warm momentum accent */
-  --accent: #7c3aed;        /* grape/violet-600 */
-  --accent-warm: #f59e0b;   /* tangerine/amber-500 */
+  /* Core palette (matches Lungeable Summary: Ink & Paper) */
+  --bg: #ffffff;      /* Paper */
+  --fg: #111111;      /* Ink */
+  --soft: #F5F5F7;    /* Apple-like soft band */
+  --border: #E5E7EB;  /* Dividers */
+  --muted: #6b7280;   /* neutral-500-ish */
 }
 
 /* Smooth anchors (e.g., header CTA → join form) */
@@ -43,18 +41,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Selection color that matches the violet accent */
+/* Neutral selection (no brand color) */
 ::selection {
-  background: rgba(124, 58, 237, 0.18); /* violet-600 @ 18% */
-  color: var(--fg);
+  background: rgba(17, 17, 17, 0.14);
+  color: inherit;
 }
 
 /* Keep link styling minimal; Tailwind handles hover states in components */
 a { text-decoration: inherit; }
 
-/* Accessible focus ring when keyboard navigating; works with Tailwind rings */
+/* Accessible focus ring in grayscale: matches current text color.
+   - On light surfaces: black ring
+   - On dark surfaces (text is white): white ring */
 *:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid currentColor;
   outline-offset: 3px;
 }
 
@@ -83,5 +83,5 @@ html {
 /* Defer rendering for below-the-fold sections (speeds up first paint) */
 .cv-auto { content-visibility: auto; }
 @supports (content-visibility: auto) {
-  .cv-auto { contain-intrinsic-size: 1px 800px; } /* rough height to avoid jumps */
+  .cv-auto { contain-intrinsic-size: 1px 800px; }
 }
