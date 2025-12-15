@@ -12,7 +12,7 @@ export default function WeekOneGlance({
   seedGoal?: Goal | '';
   seedMinutes?: number;
   seedEquipment?: string[];
-  onJoin?: () => void;
+  onJoin: () => void;
 }) {
   const [goal, setGoal] = useState<Goal>((seedGoal as Goal) || 'build');
   const [minutes, setMinutes] = useState<number>(
@@ -31,14 +31,11 @@ export default function WeekOneGlance({
   }, [seedMinutes]);
 
   useEffect(() => {
-    if (seedEquipment && seedEquipment.length)
-      setEquipment(seedEquipment.slice(0, 4));
+    if (seedEquipment && seedEquipment.length) setEquipment(seedEquipment.slice(0, 4));
   }, [seedEquipment]);
 
   function toggleEq(k: string) {
-    setEquipment((prev) =>
-      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]
-    );
+    setEquipment((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   }
 
   const summary = useMemo(
@@ -81,20 +78,23 @@ export default function WeekOneGlance({
   }, [goal, minutes]);
 
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 overflow-hidden">
-      <h3 className="text-lg font-semibold">Week 1 — what your client sees</h3>
-      <p className="mt-1 text-sm text-neutral-300">
+    <div className="rounded-3xl border border-black/10 bg-black p-6 text-white shadow-device overflow-hidden">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
+        Week 1 draft
+      </p>
+      <h3 className="mt-2 text-lg font-semibold tracking-tight">What your client sees</h3>
+      <p className="mt-2 text-sm text-white/70">
         Pick goal, time &amp; equipment. Lungeable drafts a safe, effective week with
         evidence‑based guardrails (SRA spacing, RPE caps, weekly set ceilings, exposure
-        budgets) — no heavy setup. Coaches review and Accept‑Week.
+        budgets). Coaches review and Accept‑Week.
       </p>
 
       {/* Quick setup controls */}
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <label className="block">
-          <span className="block text-xs font-semibold text-neutral-400">Goal</span>
+          <span className="block text-xs font-semibold text-white/60">Goal</span>
           <select
-            className="mt-1 w-full rounded-xl bg-neutral-800/70 px-3 py-2 outline-none ring-1 ring-neutral-800 focus:ring-neutral-600"
+            className="mt-1 w-full rounded-xl bg-white/5 px-3 py-2 text-sm text-white outline-none ring-1 ring-white/10 focus:ring-white/25"
             value={goal}
             onChange={(e) => setGoal(e.currentTarget.value as Goal)}
           >
@@ -106,7 +106,7 @@ export default function WeekOneGlance({
         </label>
 
         <label className="block">
-          <span className="block text-xs font-semibold text-neutral-400">Minutes</span>
+          <span className="block text-xs font-semibold text-white/60">Minutes</span>
           <div className="mt-1 flex flex-wrap gap-2">
             {[20, 30, 45, 60].map((m) => {
               const selected = minutes === m;
@@ -116,10 +116,10 @@ export default function WeekOneGlance({
                   type="button"
                   onClick={() => setMinutes(m)}
                   aria-pressed={selected}
-                  className={`min-h-[44px] rounded-full border px-3 py-2 text-sm ${
+                  className={`min-h-[44px] rounded-full border px-3 py-2 text-sm transition-colors ${
                     selected
-                      ? 'border-white/25 bg-white/10 text-white'
-                      : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
+                      ? 'border-white/30 bg-white/10 text-white'
+                      : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
                   }`}
                 >
                   {m} min
@@ -130,7 +130,7 @@ export default function WeekOneGlance({
         </label>
 
         <label className="block">
-          <span className="block text-xs font-semibold text-neutral-400">Equipment</span>
+          <span className="block text-xs font-semibold text-white/60">Equipment</span>
           <div className="mt-1 flex flex-wrap gap-2">
             {['bodyweight', 'db', 'barbell', 'machines', 'bands'].map((k) => {
               const selected = equipment.includes(k);
@@ -140,10 +140,10 @@ export default function WeekOneGlance({
                   type="button"
                   onClick={() => toggleEq(k)}
                   aria-pressed={selected}
-                  className={`min-h-[44px] rounded-full border px-3 py-2 text-sm ${
+                  className={`min-h-[44px] rounded-full border px-3 py-2 text-sm transition-colors ${
                     selected
-                      ? 'border-white/25 bg-white/10 text-white'
-                      : 'border-neutral-700 bg-neutral-800/70 text-neutral-300'
+                      ? 'border-white/30 bg-white/10 text-white'
+                      : 'border-white/10 bg-white/5 text-white/80 hover:bg-white/10'
                   }`}
                 >
                   {selected && <span className="mr-1">✓</span>}
@@ -156,8 +156,8 @@ export default function WeekOneGlance({
       </div>
 
       {/* Weekly preview */}
-      <div className="mt-5 rounded-xl border border-neutral-800 bg-neutral-900/70 p-5">
-        <div className="flex items-center justify-between text-xs text-neutral-400">
+      <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="flex items-center justify-between text-xs text-white/60">
           <span>{title}</span>
           <span>{summary}</span>
         </div>
@@ -166,41 +166,35 @@ export default function WeekOneGlance({
           {tiles.map((t) => (
             <div
               key={t.label}
-              className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-3"
+              className="rounded-xl border border-white/10 bg-black/40 p-3"
             >
-              <div className="text-sm text-neutral-200">{t.label}</div>
-              <div className="mt-0.5 text-xs text-neutral-400">{t.note}</div>
+              <div className="text-sm text-white">{t.label}</div>
+              <div className="mt-0.5 text-xs text-white/60">{t.note}</div>
             </div>
           ))}
         </div>
 
-        <ul className="mt-3 grid gap-2 text-sm text-neutral-300 sm:grid-cols-2">
+        <ul className="mt-3 grid gap-2 text-sm text-white/75 sm:grid-cols-2">
           <li>• Accept‑Week plan (~{estSessions} sessions)</li>
           <li>• Pocket Coach ready — client texts, you approve</li>
           <li>• Safe progression (SRA/RPE/sets)</li>
           <li>• Hotel‑gym friendly swaps</li>
         </ul>
-        {onJoin ? (
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onJoin}
-              className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-black shadow-sm hover:bg-neutral-100"
-            >
-              Reserve my spot
-            </button>
-            <span className="text-xs text-neutral-500">
-              Illustrative — your real plan adapts weekly with Pocket Coach &amp; Weekly Report.
-            </span>
-          </div>
-        ) : (
-          <p className="mt-4 text-xs text-neutral-500">
-            Illustrative — coaches review the draft and Accept‑Week.
-          </p>
-        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={onJoin}
+            className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-black shadow-sm hover:bg-neutral-100"
+          >
+            Apply for early access
+          </button>
+          <span className="text-xs text-white/60">
+            Illustrative — your real plan adapts weekly with Pocket Coach &amp; Weekly Report.
+          </span>
+        </div>
       </div>
 
-      <p className="mt-2 text-xs text-neutral-500">
+      <p className="mt-3 text-xs text-white/60">
         Switch goal/minutes/equipment to see how Lungeable adapts. Your Weekly Report will
         tune next week automatically.
       </p>

@@ -7,7 +7,7 @@ import './App.css';
 /* -----------------------------------------------------------------------------
    Global error capture
    - Catches both render-time errors (via ErrorBoundary) and async errors
-     (unhandled Promise rejections / window errors) so the app never goes black.
+     (unhandled Promise rejections / window errors) so the app never goes blank.
 ----------------------------------------------------------------------------- */
 
 type AppError = { message: string; stack?: string };
@@ -72,15 +72,15 @@ function CrashScreen({ error }: { error: AppError }) {
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        background: '#F5F5F7',
-        color: '#111111',
+        background: '#ffffff',
+        color: '#0a0a0a',
         padding: '24px',
         textAlign: 'center',
       }}
     >
       <div style={{ maxWidth: 720 }}>
         <h1 style={{ fontSize: 24, margin: '0 0 8px' }}>Something went wrong</h1>
-        <p style={{ opacity: 0.8, margin: '0 0 16px' }}>
+        <p style={{ opacity: 0.75, margin: '0 0 16px' }}>
           Please refresh and try again. The error is also logged in the console.
         </p>
 
@@ -89,11 +89,11 @@ function CrashScreen({ error }: { error: AppError }) {
             onClick={() => location.reload()}
             style={{
               borderRadius: 12,
-              background: '#111111',
+              background: '#0a0a0a',
               color: '#ffffff',
               padding: '10px 16px',
               fontWeight: 700,
-              border: '1px solid #111111',
+              border: '1px solid #0a0a0a',
               cursor: 'pointer',
             }}
           >
@@ -103,11 +103,11 @@ function CrashScreen({ error }: { error: AppError }) {
             onClick={() => setShowDetails((s) => !s)}
             style={{
               borderRadius: 12,
-              background: '#ffffff',
-              color: '#111111',
+              background: 'transparent',
+              color: '#0a0a0a',
               padding: '10px 16px',
               fontWeight: 700,
-              border: '1px solid #E5E7EB',
+              border: '1px solid rgba(0,0,0,0.18)',
               cursor: 'pointer',
             }}
           >
@@ -121,9 +121,9 @@ function CrashScreen({ error }: { error: AppError }) {
               marginTop: 16,
               textAlign: 'left',
               whiteSpace: 'pre-wrap',
-              background: '#ffffff',
-              border: '1px solid #E5E7EB',
-              color: '#111111',
+              background: '#f5f5f7',
+              border: '1px solid rgba(0,0,0,0.12)',
+              color: '#111',
               padding: 16,
               borderRadius: 12,
               overflow: 'auto',

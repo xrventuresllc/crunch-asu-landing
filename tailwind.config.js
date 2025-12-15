@@ -1,8 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  // Marketing is “Ink & Paper” (black/white + soft neutrals).
-  // Keep media darkMode for future app UI; landing page styling is explicit.
-  darkMode: 'media',
+  // Keep this flexible for the future; marketing is currently designed in light mode.
+  darkMode: 'class',
   content: [
     './index.html',
     './privacy.html',
@@ -18,27 +17,25 @@ export default {
     extend: {
       // Allow min-h-12 (3rem ~ 48px) for larger tap targets
       minHeight: {
-        12: '3rem',
-        tap: '44px', // Apple HIG minimum
+        12: '3rem', // enables class: min-h-12
+        tap: '44px', // optional alias: min-h-tap (Apple HIG minimum)
       },
 
-      // Brand tokens (updated to black/white first)
+      // Monochrome “Apple-ish” marketing palette (use Tailwind neutrals + these aliases as needed)
       colors: {
-        ink: '#111111',
-        paper: '#FFFFFF',
-        soft: '#F5F5F7',
-        border: '#E5E7EB',
+        ink: '#0a0a0a',
+        paper: '#ffffff',
+        soft: '#f5f5f7',
       },
 
-      // Type roles (keep these disciplined across sections)
       fontSize: {
-        'display-1': ['3.5rem', { lineHeight: '1.1' }],
-        h2: ['2.25rem', { lineHeight: '1.2' }],
-        h3: ['1.5rem', { lineHeight: '1.3' }],
-        body: ['0.9375rem', { lineHeight: '1.6' }],
+        'display-1': ['3.5rem', { lineHeight: '1.08', letterSpacing: '-0.02em' }],
+        h2: ['2.25rem', { lineHeight: '1.18', letterSpacing: '-0.02em' }],
+        h3: ['1.5rem', { lineHeight: '1.3', letterSpacing: '-0.01em' }],
+        body: ['0.9375rem', { lineHeight: '1.65' }],
       },
 
-      // Small animation used by milestone toasts (mirrors App.css if you prefer class-based usage)
+      // Small micro-animation for inline success/error toasts
       keyframes: {
         'toast-pop': {
           '0%': { opacity: '0', transform: 'translateY(6px) scale(0.98)' },
@@ -46,14 +43,12 @@ export default {
         },
       },
       animation: {
-        'toast-pop': 'toast-pop 0.24s ease-out both',
+        'toast-pop': 'toast-pop 0.22s ease-out both',
       },
 
       boxShadow: {
-        // A very “Apple-ish” soft lift for cards on white.
-        apple: '0 0 0 1px rgba(0,0,0,0.04), 0 24px 60px rgba(0,0,0,0.18)',
-        // Heavier shadow for dark device shells.
-        device: '0 0 0 1px rgba(0,0,0,0.06), 0 28px 80px rgba(0,0,0,0.35)',
+        // Subtle “device” shadow used by UI mocks
+        device: '0 20px 60px rgba(0,0,0,0.18)',
       },
 
       borderRadius: {
@@ -61,7 +56,5 @@ export default {
       },
     },
   },
-  plugins: [
-    // Add plugins here if you decide to use them (e.g., require('@tailwindcss/forms'))
-  ],
+  plugins: [],
 };

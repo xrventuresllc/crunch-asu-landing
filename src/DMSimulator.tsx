@@ -9,11 +9,9 @@ interface DMSimulatorProps {
   onSim?: (key: DMKey) => void;
   /** When set, auto‑plays that scenario once each time the value changes. */
   autoKey?: DMKey | null;
-  /** Compact mode for tight device previews (keeps the core interaction, trims chrome). */
-  compact?: boolean;
 }
 
-export default function DMSimulator({ onSim, autoKey, compact = false }: DMSimulatorProps) {
+export default function DMSimulator({ onSim, autoKey }: DMSimulatorProps) {
   const [lines, setLines] = useState<Line[]>([]);
   const [running, setRunning] = useState(false);
   const timeouts = useRef<number[]>([]);
@@ -31,7 +29,7 @@ export default function DMSimulator({ onSim, autoKey, compact = false }: DMSimul
       },
     ],
     knee: [
-      { from: 'you', text: 'Right knee aches—avoid deep flexion.' },
+      { from: 'you', text: 'Right knee aches — avoid deep flexion.' },
       {
         from: 'coach',
         text: 'Swapping to ROM‑friendly patterns, tempo tweak, lower plyo volume.',
@@ -98,58 +96,37 @@ export default function DMSimulator({ onSim, autoKey, compact = false }: DMSimul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoKey]);
 
-  const containerClass =
-    'rounded-2xl border border-neutral-800 bg-neutral-900/60 overflow-hidden ' +
-    (compact ? 'p-4' : 'p-5');
-
-  const titleClass = compact
-    ? 'text-sm font-semibold text-neutral-100'
-    : 'text-lg font-semibold text-neutral-100';
-
-  const descClass = compact ? 'mt-1 text-[12px] text-neutral-300' : 'mt-1 text-sm text-neutral-300';
-
-  const buttonClass =
-    'rounded-2xl border border-neutral-800 bg-neutral-900/70 text-left text-neutral-100 hover:bg-neutral-900';
-
   return (
-    <div className={containerClass}>
-      {!compact && (
-        <>
-          <h3 className={titleClass}>Pocket Coach — replan via chat</h3>
-          <p className={descClass}>
-            Natural‑language replans that preserve anchors &amp; exposure budgets. Clients and coaches
-            can both trigger changes; coaches approve week‑level updates.
-          </p>
-        </>
-      )}
+    <div className="rounded-3xl border border-black/10 bg-black p-6 text-white shadow-device overflow-hidden">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/60">
+        Pocket Coach
+      </p>
+      <h3 className="mt-2 text-lg font-semibold tracking-tight">
+        Replan sessions via chat — without breaking the block.
+      </h3>
+      <p className="mt-2 text-sm text-white/70">
+        Clients DM constraints. Pocket Coach proposes guardrail‑safe tweaks that preserve
+        anchors and exposure budgets. You approve week‑level changes.
+      </p>
 
-      {compact && (
-        <div className="flex items-center justify-between">
-          <h3 className={titleClass}>Pocket Coach DM</h3>
-          <span className="rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[11px] text-neutral-300">
-            Propose → approve
-          </span>
-        </div>
-      )}
-
-      <div className={compact ? 'mt-3 grid gap-2' : 'mt-4 grid gap-3 sm:grid-cols-3'}>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <button
           type="button"
-          className={buttonClass + (compact ? ' p-2 text-xs' : ' min-h-[44px] p-3 text-sm')}
+          className="min-h-[44px] rounded-2xl border border-white/10 bg-white/5 p-3 text-left text-sm text-white hover:bg-white/10"
           onClick={() => play('busy')}
         >
           “Only 25 minutes today.”
         </button>
         <button
           type="button"
-          className={buttonClass + (compact ? ' p-2 text-xs' : ' min-h-[44px] p-3 text-sm')}
+          className="min-h-[44px] rounded-2xl border border-white/10 bg-white/5 p-3 text-left text-sm text-white hover:bg-white/10"
           onClick={() => play('knee')}
         >
-          “Right knee aches—avoid deep flexion.”
+          “Right knee aches — avoid deep flexion.”
         </button>
         <button
           type="button"
-          className={buttonClass + (compact ? ' p-2 text-xs' : ' min-h-[44px] p-3 text-sm')}
+          className="min-h-[44px] rounded-2xl border border-white/10 bg-white/5 p-3 text-left text-sm text-white hover:bg-white/10"
           onClick={() => play('hotel')}
         >
           “Hotel gym — no bench.”
@@ -157,16 +134,13 @@ export default function DMSimulator({ onSim, autoKey, compact = false }: DMSimul
       </div>
 
       <div
-        className={
-          'mt-4 rounded-xl border border-neutral-800 bg-neutral-900/70 p-4 ' +
-          (compact ? 'min-h-[130px]' : 'min-h-[96px]')
-        }
+        className="mt-4 min-h-[104px] rounded-2xl border border-white/10 bg-white/5 p-4"
         aria-live="polite"
       >
         {lines.length === 0 ? (
-          <p className={compact ? 'text-xs text-neutral-500' : 'text-sm text-neutral-500'}>
-            Tap a scenario to preview Pocket Coach. In the real app, approvals update the client’s
-            current week and roll into Weekly Reports.
+          <p className="text-sm text-white/60">
+            Tap a scenario to preview Pocket Coach. In the real app, each approval updates
+            the client’s current week and rolls into their Weekly Report.
           </p>
         ) : (
           lines.map((L, idx) => (
@@ -175,10 +149,10 @@ export default function DMSimulator({ onSim, autoKey, compact = false }: DMSimul
               className={`mt-2 flex ${L.from === 'you' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 ${
-                  compact ? 'text-xs' : 'text-sm'
-                } ${
-                  L.from === 'you' ? 'bg-white text-black' : 'bg-neutral-800 text-neutral-200'
+                className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${
+                  L.from === 'you'
+                    ? 'bg-white text-black'
+                    : 'bg-white/10 text-white'
                 }`}
               >
                 {L.text}
@@ -188,17 +162,9 @@ export default function DMSimulator({ onSim, autoKey, compact = false }: DMSimul
         )}
       </div>
 
-      {!compact && (
-        <p className="mt-2 text-xs text-neutral-500">
-          Clients just text constraints. You keep full control and approve week‑level changes.
-        </p>
-      )}
-
-      {compact && (
-        <p className="mt-2 text-[11px] text-neutral-500">
-          You keep control: approve week‑level changes.
-        </p>
-      )}
+      <p className="mt-3 text-xs text-white/60">
+        Assistant, not replacement: proposals are constrained by your rules. You still approve.
+      </p>
     </div>
   );
 }

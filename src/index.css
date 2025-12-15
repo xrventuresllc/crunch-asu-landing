@@ -3,21 +3,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --------- "Ink & Paper" base polish (Apple-clean, black/white first) --------- */
+/* ---------------------------------------------------------------------------
+   Global marketing defaults (Apple-ish, monochrome)
+   - Mostly white/light bands
+   - One or two dark feature bands are OK, but the default is “paper + ink”
+--------------------------------------------------------------------------- */
 
 :root {
-  /* Default marketing surface is light. */
   color-scheme: light;
 
-  /* Core palette (matches Lungeable Summary: Ink & Paper) */
-  --bg: #ffffff;      /* Paper */
-  --fg: #111111;      /* Ink */
-  --soft: #F5F5F7;    /* Apple-like soft band */
-  --border: #E5E7EB;  /* Dividers */
-  --muted: #6b7280;   /* neutral-500-ish */
+  --bg: #ffffff;
+  --fg: #0a0a0a;
+  --muted: #6b7280; /* neutral-500-ish */
+
+  /* Monochrome accent (used for focus and selection) */
+  --accent: rgba(0, 0, 0, 0.78);
 }
 
-/* Smooth anchors (e.g., header CTA → join form) */
+/* Smooth anchors (sticky header offsets are handled via scroll-margin in App.css) */
 html { scroll-behavior: smooth; }
 
 /* Respect users who prefer less motion */
@@ -41,36 +44,34 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Neutral selection (no brand color) */
+/* Selection (subtle, monochrome) */
 ::selection {
-  background: rgba(17, 17, 17, 0.14);
-  color: inherit;
+  background: rgba(0, 0, 0, 0.12);
+  color: var(--fg);
 }
 
 /* Keep link styling minimal; Tailwind handles hover states in components */
 a { text-decoration: inherit; }
 
-/* Accessible focus ring in grayscale: matches current text color.
-   - On light surfaces: black ring
-   - On dark surfaces (text is white): white ring */
+/* Accessible focus ring when keyboard navigating */
 *:focus-visible {
-  outline: 2px solid currentColor;
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
 /* Prevent iOS font-size adjustments on rotation */
-html {
-  -webkit-text-size-adjust: 100%;
-}
+html { -webkit-text-size-adjust: 100%; }
 
-/* --- Mobile-first helpers (small, optional) --- */
+/* ---------------------------------------------------------------------------
+   Small utilities
+--------------------------------------------------------------------------- */
+
 @supports (text-wrap: balance) {
   .text-balance { text-wrap: balance; }
 }
 
-/* Optional readable line lengths */
 .measure-tight { max-width: 22ch; }  /* great for hero <h1> */
-.measure       { max-width: 40ch; }  /* nice for short intros */
+.measure       { max-width: 42ch; }  /* readable intros */
 
 /* iOS/Android safe-area helpers for sticky bars & footers */
 :root {
