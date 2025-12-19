@@ -8,11 +8,13 @@
     />
 
     <!-- Coach-first pre-launch -->
-    <title>Lungeable — Adaptive training OS for online strength coaches</title>
+    <title>Lungeable — Adaptive training OS for remote strength coaches</title>
     <meta
       name="description"
-      content="Lungeable helps online strength & sport coaches draft safe, effective week plans in minutes, replan from client DMs with Pocket Coach, and tune next week from Weekly Reports. Join the founding coach waitlist for early access."
+      content="Lungeable is an adaptive training OS for remote strength coaches. Draft weeks with guardrails, handle DM replans with Pocket Coach, and approve next week from Weekly Reports → Accept‑Week. Book a demo."
     />
+
+    <meta name="robots" content="index,follow" />
 
     <!-- Favicons -->
     <link rel="icon" href="/Lungeable%20Logo.png" type="image/png" />
@@ -26,10 +28,10 @@
     <meta name="format-detection" content="telephone=no" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
 
-    <!-- Base & canonical (replace with your live domain when ready) -->
+    <!-- Base & canonical -->
     <base href="/" />
-    <!-- Optional: set your canonical to the production origin -->
-    <!-- <link rel="canonical" href="https://YOUR-DOMAIN/" /> -->
+    <!-- Set VITE_SITE_URL in production (e.g., https://lungeable.ai) -->
+    <link rel="canonical" href="%VITE_SITE_URL%/" />
 
     <!-- Performance: preconnect to services used on submit/analytics -->
     <link rel="preconnect" href="https://formspree.io" />
@@ -41,19 +43,20 @@
     <meta property="og:site_name" content="Lungeable" />
     <meta
       property="og:title"
-      content="Lungeable — Adaptive training OS for online strength coaches"
+      content="Lungeable — Program weeks in minutes. Adjust in seconds."
     />
     <meta
       property="og:description"
-      content="Draft week plans in minutes, replan via Pocket Coach from client DMs, and tune next week from Weekly Reports. Built for online & hybrid strength coaches."
+      content="Adaptive training OS for remote strength coaches. Weekly Report → Accept‑Week, Pocket Coach DM replans, and guardrails that enforce your rules."
     />
     <meta property="og:type" content="website" />
-    <!-- If you have a final URL, set it here -->
-    <!-- <meta property="og:url" content="https://YOUR-DOMAIN/" /> -->
-    <!-- Replace with /og.png (1200x630) when ready -->
-    <meta property="og:image" content="/Lungeable%20Logo.png" />
+    <meta property="og:url" content="%VITE_SITE_URL%/" />
+    <!-- Most social platforms require absolute URLs for images -->
+    <meta property="og:image" content="%VITE_SITE_URL%/og-coach-dashboard.png" />
+    <meta property="og:image:secure_url" content="%VITE_SITE_URL%/og-coach-dashboard.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
     <meta
       property="og:image:alt"
       content="Lungeable — Adaptive training OS for online strength coaches."
@@ -62,13 +65,13 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="Lungeable — Adaptive training OS for online strength coaches"
+      content="Lungeable — Adaptive training OS for remote strength coaches"
     />
     <meta
       name="twitter:description"
-      content="Ship programming in minutes, not midnight. Lungeable drafts week plans, updates from client DMs, and rolls everything into Weekly Reports so you can coach more and admin less."
+      content="Program weeks in minutes, adjust in seconds. Weekly Reports → Accept‑Week, Pocket Coach DM replans, and evidence‑based guardrails."
     />
-    <meta name="twitter:image" content="/Lungeable%20Logo.png" />
+    <meta name="twitter:image" content="%VITE_SITE_URL%/og-coach-dashboard.png" />
 
     <!-- Structured data (keep App, but tilt description toward coaches) -->
     <script type="application/ld+json">
@@ -79,7 +82,7 @@
         "applicationCategory": "HealthAndFitnessApplication",
         "operatingSystem": "iOS, Android, Web",
         "description": "Adaptive training OS for online & hybrid strength coaches. Generate safe, evidence-based week plans from constraints, replan via Pocket Coach from client messages, and tune training with Weekly Reports.",
-        "url": "/",
+        "url": "%VITE_SITE_URL%/",
         "publisher": {
           "@type": "Organization",
           "name": "Lungeable"
@@ -89,7 +92,7 @@
           "audienceType": "Strength and sport coaches"
         },
         "sameAs": [
-          "www.linkedin.com/in/xuru-ren-lungeablefounder"
+          "https://www.linkedin.com/in/xuru-ren-lungeablefounder"
         ]
       }
     </script>

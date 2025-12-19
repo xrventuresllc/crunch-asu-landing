@@ -186,7 +186,7 @@ export default function WeekOneGlance({
             onClick={onJoin}
             className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-black shadow-sm hover:bg-neutral-100"
           >
-            Apply for early access
+            Book a 15‑min demo
           </button>
           <span className="text-xs text-white/60">
             Illustrative — your real plan adapts weekly with Pocket Coach &amp; Weekly Report.
