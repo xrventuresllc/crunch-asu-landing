@@ -5,7 +5,6 @@ import DMSimulator from './DMSimulator';
 import { supabase, SUPABASE_CONFIGURED } from './supabaseClient';
 
 type ScrollStepId = 'onboard' | 'pocket' | 'report' | 'accept';
-
 type CtaMode = 'demo' | 'apply';
 
 const SITE_VERSION = 'coach-landing-v2-mono';
@@ -22,6 +21,11 @@ const ALLOWED_COACH_INTENTS = [
   'Other',
 ] as const;
 
+const ASSET_BASE = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
+const LOGO_SVG_SRC = `${ASSET_BASE}logo.svg`;
+const LOGO_PNG_SRC = `${ASSET_BASE}${encodeURI('Lungeable Logo.png')}`;
+const OG_IMAGE_SRC = `${ASSET_BASE}og.png`;
+
 function getUtmFromUrl(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   const params = new URLSearchParams(window.location.search);
@@ -34,6 +38,39 @@ function getUtmFromUrl(): Record<string, string> {
   return utm;
 }
 
+function upsertMetaTag(
+  key: { name?: string; property?: string },
+  content: string
+): void {
+  if (typeof document === 'undefined') return;
+
+  const attr = key.name ? 'name' : 'property';
+  const value = key.name ?? key.property ?? '';
+  if (!value) return;
+
+  const selector = `meta[${attr}="${value}"]`;
+  let el = document.querySelector<HTMLMetaElement>(selector);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, value);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
+}
+
+function upsertLinkTag(rel: string, href: string): void {
+  if (typeof document === 'undefined') return;
+
+  const selector = `link[rel="${rel}"]`;
+  let el = document.querySelector<HTMLLinkElement>(selector);
+  if (!el) {
+    el = document.createElement('link');
+    el.setAttribute('rel', rel);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('href', href);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Hooks                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -43,9 +80,7 @@ function useScrollSteps(stepIds: ScrollStepId[]): ScrollStepId {
 
   useEffect(() => {
     if (!stepIds.length) return;
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
-      return;
-    }
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -81,6 +116,7 @@ function usePrefersReducedMotion() {
     if (typeof window === 'undefined' || !('matchMedia' in window)) return;
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     setReduced(mq.matches);
+
     const handler = (event: MediaQueryListEvent) => setReduced(event.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
@@ -160,22 +196,75 @@ function Band({
   );
 }
 
+function BrandMark({ className = '' }: { className?: string }) {
+  // Prefer SVG if it exists, fall back to your public/Lungeable Logo.png automatically.
+  const [src, setSrc] = useState(LOGO_SVG_SRC);
+
+  return (
+    <img
+      src={src}
+      onError={() => {
+        // Avoid infinite loops if both assets are missing.
+        if (src !== LOGO_PNG_SRC) setSrc(LOGO_PNG_SRC);
+      }}
+      alt="Lungeable"
+      className={`h-8 w-8 rounded-xl border border-black/10 bg-white p-1 ${className}`}
+    />
+  );
+}
+
+function BrandLockup({ href }: { href: string }) {
+  return (
+    <a href={href} className="flex items-center gap-2">
+      <BrandMark />
+      <div className="leading-tight">
+        <p className="text-sm font-semibold">Lungeable</p>
+        <p className="text-xs text-neutral-500">Adaptive training OS</p>
+      </div>
+    </a>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* App                                                                         */
 /* -------------------------------------------------------------------------- */
 
 const App: React.FC = () => {
-  // This site is intentionally “no-router”: we only special-case /demo for Calendly.
+  // This site is intentionally “no-router”: we only special-case /demo.
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
   const isDemoPage = pathname === DEMO_ROUTE || pathname.startsWith(`${DEMO_ROUTE}/`);
 
   // CTA mode for Join section
   const [ctaMode, setCtaMode] = useState<CtaMode>('demo');
 
+  // Minimal SEO/meta polish (still also recommended to hardcode these in index.html for OG bots).
   useEffect(() => {
-    document.title = isDemoPage
+    const title = isDemoPage
       ? 'Book a demo — Lungeable'
       : 'Lungeable — Adaptive training OS for remote strength coaches';
+
+    const description = isDemoPage
+      ? 'Schedule a walkthrough of the Weekly Report → Accept‑Week loop, Pocket Coach replans, and guardrails.'
+      : 'Program weeks in minutes. Adjust in seconds. Weekly Reports draft next week, Pocket Coach handles chaos, and guardrails enforce your rules.';
+
+    document.title = title;
+
+    upsertMetaTag({ name: 'description' }, description);
+    upsertMetaTag({ property: 'og:title' }, title);
+    upsertMetaTag({ property: 'og:description' }, description);
+    upsertMetaTag({ property: 'og:type' }, 'website');
+    upsertMetaTag({ property: 'og:image' }, OG_IMAGE_SRC);
+    upsertMetaTag({ name: 'twitter:card' }, 'summary_large_image');
+    upsertMetaTag({ name: 'twitter:title' }, title);
+    upsertMetaTag({ name: 'twitter:description' }, description);
+    upsertMetaTag({ name: 'twitter:image' }, OG_IMAGE_SRC);
+
+    if (typeof window !== 'undefined') {
+      const canonical = new URL(window.location.href);
+      canonical.search = '';
+      canonical.hash = '';
+      upsertLinkTag('canonical', canonical.toString());
+    }
   }, [isDemoPage]);
 
   const scrollToJoin = (mode: CtaMode = 'apply') => {
@@ -241,9 +330,7 @@ export default App;
 
 function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.scrollTo(0, 0);
-    }
+    if (typeof window !== 'undefined') window.scrollTo(0, 0);
   }, []);
 
   const backToSite = () => {
@@ -261,17 +348,7 @@ function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
       <header className="safe-pt sticky top-0 z-50 border-b border-black/10 bg-white/90 backdrop-blur">
         <Container>
           <div className="flex h-16 items-center justify-between">
-            <a href="/" className="flex items-center gap-2">
-              <img
-                src="/logo.svg"
-                alt="Lungeable"
-                className="h-8 w-8 rounded-xl border border-black/10 bg-white p-1"
-              />
-              <div className="leading-tight">
-                <p className="text-sm font-semibold">Lungeable</p>
-                <p className="text-xs text-neutral-500">Adaptive training OS</p>
-              </div>
-            </a>
+            <BrandLockup href="/" />
 
             <div className="flex items-center gap-3">
               <button
@@ -303,8 +380,7 @@ function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
                 Schedule a 30‑minute walkthrough
               </h1>
               <p className="mt-3 text-sm text-neutral-700">
-                We&apos;ll focus on the weekly loop: Weekly Reports → Accept‑Week, Pocket Coach,
-                and guardrails.
+                We&apos;ll focus on the weekly loop: Weekly Reports → Accept‑Week, Pocket Coach, and guardrails.
               </p>
             </div>
 
@@ -353,17 +429,7 @@ function Header({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }
     <header className="safe-pt sticky top-0 z-50 border-b border-black/10 bg-white/90 backdrop-blur">
       <Container>
         <div className="flex h-16 items-center justify-between">
-          <a href="#coach" className="flex items-center gap-2">
-            <img
-              src="/logo.svg"
-              alt="Lungeable"
-              className="h-8 w-8 rounded-xl border border-black/10 bg-white p-1"
-            />
-            <div className="leading-tight">
-              <p className="text-sm font-semibold">Lungeable</p>
-              <p className="text-xs text-neutral-500">Adaptive training OS</p>
-            </div>
-          </a>
+          <BrandLockup href="#coach" />
 
           <div className="flex items-center gap-6">
             <nav className="hidden items-center gap-6 text-sm text-neutral-700 md:flex">
@@ -423,9 +489,9 @@ function Hero({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) 
               Adjust in seconds.
             </h1>
             <p className="mt-4 text-sm text-neutral-700">
-              Lungeable drafts weeks with evidence‑based guardrails, turns check‑ins into clear Weekly
-              Reports, and gives you a tuned next‑week draft you can{' '}
-              <span className="font-semibold">Accept‑Week</span>—without rewriting 20 plans every Sunday.
+              Lungeable drafts weeks with evidence‑based guardrails, turns check‑ins into clear Weekly Reports, and
+              gives you a tuned next‑week draft you can <span className="font-semibold">Accept‑Week</span>—without
+              rewriting 20 plans every Sunday.
             </p>
 
             <ul className="mt-5 space-y-2 text-sm text-neutral-800">
@@ -448,6 +514,7 @@ function Hero({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) 
               <SecondaryLink href="#how">See how it works →</SecondaryLink>
             </div>
 
+            {/* Proof artifact above the fold (honest, lightweight) */}
             <p className="mt-4 text-xs text-neutral-600">
               Try it with <span className="font-semibold">3 clients</span> first. No migration required.
             </p>
@@ -499,8 +566,8 @@ function WhySwitch() {
             Sell coaching — not spreadsheets.
           </h2>
           <p className="mt-3 text-sm text-neutral-700">
-            Lungeable is purpose-built for remote strength/physique coaches with ~10–50 clients who are
-            drowning in weekly edits.
+            Lungeable is purpose-built for remote strength/physique coaches with ~10–50 clients who are drowning in
+            weekly edits.
           </p>
         </div>
 
@@ -599,16 +666,12 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
                 <DeviceScene visible={activeId === 'accept'} reducedMotion={reducedMotion}>
                   <div className="rounded-3xl border border-black/10 bg-white p-4">
                     <p className="text-sm font-semibold">Accept‑Week</p>
-                    <p className="mt-1 text-sm text-neutral-700">
-                      Commit next week in one click after a fast review.
-                    </p>
+                    <p className="mt-1 text-sm text-neutral-700">Commit next week in one click after a fast review.</p>
                     <div className="mt-4">
                       <PrimaryButton onClick={onDemo} className="w-full justify-center">
                         Book a demo
                       </PrimaryButton>
-                      <p className="mt-2 text-[11px] text-neutral-500">
-                        Accept commits the week — you can tweak anything first.
-                      </p>
+                      <p className="mt-2 text-[11px] text-neutral-500">Accept commits the week — you can tweak anything first.</p>
                     </div>
                   </div>
                 </DeviceScene>
@@ -623,8 +686,7 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
                 The loop: draft, adapt, report, accept.
               </h2>
               <p className="mt-3 text-sm text-neutral-700">
-                Your clients just train. You get a clean weekly workflow that keeps quality consistent without
-                burning your evenings.
+                Your clients just train. You get a clean weekly workflow that keeps quality consistent without burning your evenings.
               </p>
 
               <StepProgress activeId={activeId} stepIds={steps.map((s) => s.id)} />
@@ -637,23 +699,11 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
                   <article
                     key={step.id}
                     data-step-id={step.id}
-                    className={`relative border-l pl-6 transition-colors ${
-                      active ? 'border-black/60 bg-black/[0.03]' : 'border-black/10'
-                    }`}
+                    className={`relative border-l pl-6 transition-colors ${active ? 'border-black/60 bg-black/[0.03]' : 'border-black/10'}`}
                   >
-                    <div
-                      className={`absolute -left-[5px] top-7 h-2.5 w-2.5 rounded-full transition-all ${
-                        active ? 'bg-black' : 'bg-black/25'
-                      }`}
-                    />
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">
-                      {step.kicker}
-                    </p>
-                    <h3
-                      className={`mt-1 text-base font-semibold sm:text-lg ${
-                        active ? 'text-black' : 'text-neutral-800'
-                      }`}
-                    >
+                    <div className={`absolute -left-[5px] top-7 h-2.5 w-2.5 rounded-full transition-all ${active ? 'bg-black' : 'bg-black/25'}`} />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">{step.kicker}</p>
+                    <h3 className={`mt-1 text-base font-semibold sm:text-lg ${active ? 'text-black' : 'text-neutral-800'}`}>
                       {step.title}
                     </h3>
                     <p className="mt-2 text-sm text-neutral-700">{step.body}</p>
@@ -665,9 +715,7 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
                 <PrimaryButton onClick={onDemo} className="px-5">
                   Book a demo →
                 </PrimaryButton>
-                <p className="mt-2 text-xs text-neutral-500">
-                  Founding coaches get direct input into roadmap and pricing.
-                </p>
+                <p className="mt-2 text-xs text-neutral-500">Founding coaches get direct input into roadmap and pricing.</p>
               </div>
             </div>
           </div>
@@ -743,8 +791,7 @@ function WeeklyReportsDeepDive({ onDemo }: { onDemo: () => void }) {
               Approve the next.
             </h2>
             <p className="mt-3 text-sm text-white/70">
-              This is the signature moment. See what happened, what changes next week, and why — then commit it in one
-              tap.
+              This is the signature moment. See what happened, what changes next week, and why — then commit it in one tap.
             </p>
 
             <ul className="mt-5 space-y-2 text-sm text-white/80">
@@ -797,8 +844,8 @@ function PocketCoachDeepDive({ onDemo, onApply }: { onDemo: () => void; onApply:
               DM‑driven replans — constrained by your rules.
             </h2>
             <p className="mt-3 text-sm text-neutral-700">
-              Pocket Coach is not “black box AI.” It proposes session-level changes that preserve anchors and exposure
-              targets, then waits for your approval.
+              Pocket Coach is not “black box AI.” It proposes session-level changes that preserve anchors and exposure targets,
+              then waits for your approval.
             </p>
 
             <ul className="mt-5 space-y-2 text-sm text-neutral-800">
@@ -809,11 +856,7 @@ function PocketCoachDeepDive({ onDemo, onApply }: { onDemo: () => void; onApply:
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <PrimaryButton onClick={onDemo}>Book a demo</PrimaryButton>
-              <button
-                type="button"
-                onClick={onApply}
-                className="text-sm font-semibold text-neutral-700 hover:text-black"
-              >
+              <button type="button" onClick={onApply} className="text-sm font-semibold text-neutral-700 hover:text-black">
                 Or apply →
               </button>
             </div>
@@ -843,8 +886,7 @@ function CoachDeskDeepDive({ onDemo }: { onDemo: () => void; onApply: () => void
               A roster view that tells you who needs action.
             </h2>
             <p className="mt-3 text-sm text-neutral-700">
-              Coach Desk is triage: missed sessions, rising RPE, unanswered DMs, and clients ready for Accept‑Week — in
-              one place.
+              Coach Desk is triage: missed sessions, rising RPE, unanswered DMs, and clients ready for Accept‑Week — in one place.
             </p>
 
             <ul className="mt-5 space-y-2 text-sm text-neutral-800">
@@ -892,8 +934,8 @@ function DefaultStackSection() {
             Keep your stack. Upgrade the training brain.
           </h2>
           <p className="mt-3 text-sm text-neutral-700">
-            Lungeable is deliberately narrow: it&apos;s the training OS (plans + reporting + DM-driven replans) — not
-            your payments, marketing, or content platform.
+            Lungeable is deliberately narrow: it&apos;s the training OS (plans + reporting + DM-driven replans) — not your payments,
+            marketing, or content platform.
           </p>
         </div>
 
@@ -907,8 +949,8 @@ function DefaultStackSection() {
         </div>
 
         <p className="mt-5 text-xs text-neutral-500">
-          Honest note: if you want payments, habits, media libraries and marketing pages in one place, an all‑in‑one
-          platform may fit better. Lungeable wins when you care about the weekly training loop.
+          Honest note: if you want payments, habits, media libraries and marketing pages in one place, an all‑in‑one platform may fit better.
+          Lungeable wins when you care about the weekly training loop.
         </p>
       </Container>
     </Band>
@@ -973,8 +1015,7 @@ function CompareSection() {
             Respectful trade‑offs, clear positioning.
           </h2>
           <p className="mt-3 text-sm text-neutral-700">
-            TrueCoach and Everfit are strong all‑in‑one platforms. Lungeable is narrower on purpose: the training OS that
-            makes weekly programming and check‑ins dramatically faster.
+            TrueCoach and Everfit are strong all‑in‑one platforms. Lungeable is narrower on purpose: the training OS that makes weekly programming and check‑ins dramatically faster.
           </p>
         </div>
 
@@ -1014,8 +1055,7 @@ function CompareSection() {
         </div>
 
         <p className="mt-4 text-xs text-neutral-500">
-          Honest note: if your #1 priority is a single platform for payments, habits, media, and marketing pages, choose an
-          all‑in‑one. If your pain is weekly programming time and mid‑week chaos, choose the training OS.
+          Honest note: if your #1 priority is a single platform for payments, habits, media, and marketing pages, choose an all‑in‑one. If your pain is weekly programming time and mid‑week chaos, choose the training OS.
         </p>
       </Container>
     </Band>
@@ -1032,7 +1072,9 @@ function PricingSection({ onDemo, onApply }: { onDemo: () => void; onApply: () =
       <Container>
         <div className="max-w-2xl">
           <Kicker>Pricing</Kicker>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Simple while we&apos;re in coach beta.</h2>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+            Simple while we&apos;re in coach beta.
+          </h2>
           <p className="mt-3 text-sm text-neutral-700">
             If Lungeable doesn&apos;t save you at least <span className="font-semibold">one check‑in&apos;s worth of time</span>{' '}
             each month, you shouldn&apos;t keep it.
@@ -1041,7 +1083,9 @@ function PricingSection({ onDemo, onApply }: { onDemo: () => void; onApply: () =
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <div className="rounded-3xl border border-black/10 bg-[#f5f5f7] p-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-600">Founding coach plan</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-600">
+              Founding coach plan
+            </p>
             <div className="mt-3 flex items-baseline gap-1">
               <span className="text-3xl font-semibold text-neutral-900">$39</span>
               <span className="text-sm text-neutral-600">/month</span>
@@ -1070,7 +1114,9 @@ function PricingSection({ onDemo, onApply }: { onDemo: () => void; onApply: () =
               Apply for early access
             </button>
 
-            <p className="mt-3 text-xs text-neutral-600">No hard sell. If it&apos;s a fit, we onboard coaches in small cohorts.</p>
+            <p className="mt-3 text-xs text-neutral-600">
+              No hard sell. If it&apos;s a fit, we onboard coaches in small cohorts.
+            </p>
           </div>
 
           <div className="rounded-3xl border border-black/10 bg-white p-6">
@@ -1087,8 +1133,7 @@ function PricingSection({ onDemo, onApply }: { onDemo: () => void; onApply: () =
               </li>
             </ul>
             <p className="mt-3 text-sm text-neutral-700">
-              Exact tiers may shift as we learn from early coaches, but the philosophy stays: priced like a serious tool,
-              anchored to how many clients you actually run through Lungeable.
+              Exact tiers may shift as we learn from early coaches, but the philosophy stays: priced like a serious tool, anchored to how many clients you actually run through Lungeable.
             </p>
           </div>
         </div>
@@ -1126,7 +1171,9 @@ function ProofSection() {
       <Container>
         <div className="max-w-2xl">
           <Kicker>Pilot metrics</Kicker>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Proof you can measure — not hype.</h2>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+            Proof you can measure — not hype.
+          </h2>
           <p className="mt-3 text-sm text-neutral-700">
             Early access runs as cohort pilots. We’ll track time saved, adherence, and safety signals weekly so you can decide with data.
           </p>
@@ -1235,18 +1282,14 @@ function JoinSection({
                   Open in Calendly →
                 </a>
               </div>
-              <p className="mt-3 text-xs text-neutral-500">
-                No hard sell. If it’s a fit, we’ll suggest a 3–10 client pilot.
-              </p>
+              <p className="mt-3 text-xs text-neutral-500">No hard sell. If it’s a fit, we’ll suggest a 3–10 client pilot.</p>
             </div>
           ) : (
             <CoachSignupForm mode={mode} />
           )}
         </div>
 
-        <p className="mt-3 text-xs text-neutral-500">
-          We’ll never sell your data. You can ask to be removed at any time.
-        </p>
+        <p className="mt-3 text-xs text-neutral-500">We’ll never sell your data. You can ask to be removed at any time.</p>
       </Container>
     </Band>
   );
@@ -1306,7 +1349,7 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
       source: mode === 'apply' ? 'coach-landing' : 'coach-landing-demo',
       site_version: `${SITE_VERSION}:${mode}`,
 
-      // Analytics / attribution:
+      // Attribution / analytics:
       utm,
 
       user_agent: ua,
@@ -1321,7 +1364,6 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
         // eslint-disable-next-line no-console
         console.error('Supabase insert error', supaError);
 
-        // More actionable error messaging (especially useful in dev).
         const msg = (supaError.message || '').toLowerCase();
         if (msg.includes('row-level security')) {
           setError('Database blocked the insert (RLS policy). Add an INSERT policy for anon on leads_coach_waitlist.');
@@ -1485,9 +1527,7 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
           <p className="text-sm font-semibold text-neutral-900">
             {alreadyOnList ? 'You’re already on the list.' : 'You’re in.'}
           </p>
-          <p className="mt-1 text-sm text-neutral-700">
-            We’ll reach out as we open new founding coach seats. No marketing drip.
-          </p>
+          <p className="mt-1 text-sm text-neutral-700">We’ll reach out as we open new founding coach seats. No marketing drip.</p>
         </div>
       )}
     </form>
@@ -1529,23 +1569,16 @@ function FaqSection() {
           <Kicker>FAQ</Kicker>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Questions coaches actually ask.</h2>
           <p className="mt-3 text-sm text-neutral-700">
-            If you&apos;re already on TrueCoach, Everfit or Sheets, skepticism is rational. Here&apos;s the short version of how
-            Lungeable fits alongside what you use now.
+            If you&apos;re already on TrueCoach, Everfit or Sheets, skepticism is rational. Here&apos;s the short version of how Lungeable fits alongside what you use now.
           </p>
         </div>
 
         <div className="mt-8 space-y-4">
           {faqs.map((item) => (
-            <details
-              key={item.q}
-              className="group rounded-3xl border border-black/10 bg-[#f5f5f7] px-5 py-4"
-            >
+            <details key={item.q} className="group rounded-3xl border border-black/10 bg-[#f5f5f7] px-5 py-4">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-neutral-900">
                 <span>{item.q}</span>
-                <span
-                  aria-hidden
-                  className="text-xs text-neutral-500 transition-transform group-open:rotate-180"
-                >
+                <span aria-hidden className="text-xs text-neutral-500 transition-transform group-open:rotate-180">
                   ▾
                 </span>
               </summary>
@@ -1670,9 +1703,7 @@ function WeeklyReportAcceptWeekMock() {
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="flex items-center justify-between text-[11px] text-white/60">
           <span className="font-semibold text-white/80">Next Week Draft</span>
-          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/70">
-            Safe
-          </span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/70">Safe</span>
         </div>
 
         <div className="mt-3 space-y-2 text-xs">
@@ -1692,10 +1723,7 @@ function WeeklyReportAcceptWeekMock() {
           </div>
         </div>
 
-        <button
-          type="button"
-          className="mt-4 w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-black hover:bg-neutral-100"
-        >
+        <button type="button" className="mt-4 w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-black hover:bg-neutral-100">
           Accept‑Week
         </button>
         <p className="mt-2 text-[11px] text-white/55">You can tweak anything before you accept. Accept commits the week.</p>
@@ -1728,9 +1756,7 @@ function DraftDay({ day, focus, tag }: { day: string; focus: string; tag: string
     <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/35 px-3 py-2">
       <span className="text-white/75">{day}</span>
       <span className="text-white">{focus}</span>
-      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60">
-        {tag}
-      </span>
+      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60">{tag}</span>
     </div>
   );
 }
@@ -1827,10 +1853,7 @@ function CoachDeskPreview() {
 
       <div className="space-y-2">
         {people.map((p) => (
-          <div
-            key={p.name}
-            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
-          >
+          <div key={p.name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-white">{p.name}</p>
               <p className="text-[11px] text-white/60">{p.note}</p>
