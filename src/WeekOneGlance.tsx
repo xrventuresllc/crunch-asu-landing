@@ -8,12 +8,23 @@ export default function WeekOneGlance({
   seedMinutes,
   seedEquipment,
   onJoin,
+  trialDays: trialDaysProp = 14,
+  trialStarterClients: trialStarterClientsProp = 3,
 }: {
   seedGoal?: Goal | '';
   seedMinutes?: number;
   seedEquipment?: string[];
   onJoin: () => void;
+  trialDays?: number;
+  trialStarterClients?: number;
 }) {
+  const trialDays =
+    Number.isFinite(trialDaysProp) && trialDaysProp > 0 ? Math.floor(trialDaysProp) : 14;
+  const trialStarterClients =
+    Number.isFinite(trialStarterClientsProp) && trialStarterClientsProp > 0
+      ? Math.floor(trialStarterClientsProp)
+      : 3;
+
   const [goal, setGoal] = useState<Goal>((seedGoal as Goal) || 'build');
   const [minutes, setMinutes] = useState<number>(
     Math.min(Math.max(seedMinutes || 45, 20), 120)
@@ -186,10 +197,10 @@ export default function WeekOneGlance({
             onClick={onJoin}
             className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-black shadow-sm hover:bg-neutral-100"
           >
-            Book a 15‑min demo
+            Start free trial
           </button>
           <span className="text-xs text-white/60">
-            Illustrative — your real plan adapts weekly with Pocket Coach &amp; Weekly Report.
+            Try it free for {trialDays} days — start with {trialStarterClients} clients. No migration required.
           </span>
         </div>
       </div>

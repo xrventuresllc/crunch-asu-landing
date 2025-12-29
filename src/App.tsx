@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, useMemo, useState, type FormEvent } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import WeekOneGlance from './WeekOneGlance';
 import DMSimulator from './DMSimulator';
 import { supabase, SUPABASE_CONFIGURED } from './supabaseClient';
@@ -13,6 +13,24 @@ const DEMO_ROUTE = '/demo';
 const DEFAULT_CALENDLY_URL = 'https://calendly.com/xuru-lungeable/30min';
 const CALENDLY_URL = import.meta.env.VITE_CALENDLY_URL || DEFAULT_CALENDLY_URL;
 
+// ---------------------------------------------------------------------------
+// Marketing constants (override via Vite env vars)
+// ---------------------------------------------------------------------------
+
+const parsePositiveInt = (value: unknown, fallback: number): number => {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+// Used across marketing copy + CTA text.
+// Defaults keep local builds working even when env vars are missing.
+const TRIAL_DAYS = parsePositiveInt(import.meta.env.VITE_TRIAL_DAYS, 14);
+const TRIAL_STARTER_CLIENTS = parsePositiveInt(import.meta.env.VITE_TRIAL_STARTER_CLIENTS, 3);
+const SUPPORT_EMAIL = (() => {
+  const v = String(import.meta.env.VITE_SUPPORT_EMAIL || '').trim();
+  return v || 'support@lungeable.com';
+})();
+
 const ALLOWED_COACH_INTENTS = [
   'Save time',
   'Safer progression',
@@ -20,6 +38,24 @@ const ALLOWED_COACH_INTENTS = [
   'Better client experience',
   'Other',
 ] as const;
+
+const TURNSTILE_SITE_KEY = (import.meta.env.VITE_TURNSTILE_SITE_KEY || '').trim();
+const COACH_WAITLIST_SIGNUP_FN = (
+  import.meta.env.VITE_COACH_WAITLIST_SIGNUP_FN || 'coach-waitlist-signup'
+).trim();
+
+declare global {
+  interface Window {
+    /**
+     * Cloudflare Turnstile (added via <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" />)
+     */
+    turnstile?: {
+      render: (container: HTMLElement, options: Record<string, unknown>) => string;
+      reset?: (widgetId?: string) => void;
+      remove?: (widgetId: string) => void;
+    };
+  }
+}
 
 const ASSET_BASE = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
 const LOGO_SVG_SRC = `${ASSET_BASE}logo.svg`;
@@ -146,17 +182,20 @@ function PrimaryButton({
   onClick,
   className = '',
   type = 'button',
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   className?: string;
   type?: 'button' | 'submit';
+  disabled?: boolean;
 }) {
   return (
     <button
       type={type}
       onClick={onClick}
-      className={`min-h-[44px] rounded-full bg-black px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-neutral-900 ${className}`}
+      disabled={disabled}
+      className={`inline-flex min-h-[44px] items-center justify-center rounded-full bg-black px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-neutral-900 disabled:cursor-not-allowed disabled:bg-neutral-500 disabled:hover:bg-neutral-500 ${className}`}
     >
       {children}
     </button>
@@ -235,7 +274,7 @@ const App: React.FC = () => {
   const isDemoPage = pathname === DEMO_ROUTE || pathname.startsWith(`${DEMO_ROUTE}/`);
 
   // CTA mode for Join section
-  const [ctaMode, setCtaMode] = useState<CtaMode>('demo');
+  const [ctaMode, setCtaMode] = useState<CtaMode>('apply');
 
   // Minimal SEO/meta polish (still also recommended to hardcode these in index.html for OG bots).
   useEffect(() => {
@@ -245,7 +284,7 @@ const App: React.FC = () => {
 
     const description = isDemoPage
       ? 'Schedule a walkthrough of the Weekly Report → Accept‑Week loop, Pocket Coach replans, and guardrails.'
-      : 'Program weeks in minutes. Adjust in seconds. Weekly Reports draft next week, Pocket Coach handles chaos, and guardrails enforce your rules.';
+      : `Program weeks in minutes. Adjust in seconds. Weekly Reports draft next week, Pocket Coach handles chaos, and guardrails enforce your rules. Try free for ${TRIAL_DAYS} days.`;
 
     document.title = title;
 
@@ -275,8 +314,28 @@ const App: React.FC = () => {
 
   const goToDemo = () => {
     if (typeof window === 'undefined') return;
-    window.location.assign(DEMO_ROUTE);
+    // Preserve UTMs/params from inbound links (esp. LinkedIn) so you can attribute bookings.
+    const qs = window.location.search || '';
+    window.location.assign(`${DEMO_ROUTE}${qs}`);
   };
+
+  // CTA-mode deep links for marketing (e.g., /?cta=apply&utm_source=linkedin)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isDemoPage) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const cta = (params.get('cta') || '').toLowerCase();
+    if (cta === 'demo') {
+      goToDemo();
+      return;
+    }
+    if (cta === 'apply' || cta === 'trial') {
+      // Delay to allow first paint before scrolling.
+      window.setTimeout(() => scrollToJoin('apply'), 50);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (isDemoPage) {
     return <DemoPage calendlyUrl={CALENDLY_URL} />;
@@ -288,26 +347,27 @@ const App: React.FC = () => {
         Skip to main content
       </a>
 
-      <Header onDemo={goToDemo} onApply={() => scrollToJoin('apply')} />
+      <AnnouncementBar onStartTrial={() => scrollToJoin('apply')} />
+      <Header onDemo={goToDemo} onStartTrial={() => scrollToJoin('apply')} />
 
       <main className="flex-1" id="main">
-        <Hero onDemo={goToDemo} onApply={() => scrollToJoin('apply')} />
+        <Hero onDemo={goToDemo} onStartTrial={() => scrollToJoin('apply')} />
 
         <WhySwitch />
 
-        <HowItWorks onDemo={goToDemo} onApply={() => scrollToJoin('apply')} />
+        <HowItWorks onDemo={goToDemo} onStartTrial={() => scrollToJoin('apply')} />
 
-        <WeeklyReportsDeepDive onDemo={goToDemo} />
+        <WeeklyReportsDeepDive onDemo={goToDemo} onStartTrial={() => scrollToJoin('apply')} />
 
-        <PocketCoachDeepDive onDemo={goToDemo} onApply={() => scrollToJoin('apply')} />
+        <PocketCoachDeepDive onDemo={goToDemo} onStartTrial={() => scrollToJoin('apply')} />
 
-        <CoachDeskDeepDive onDemo={goToDemo} onApply={() => scrollToJoin('apply')} />
+        <CoachDeskDeepDive onDemo={goToDemo} onStartTrial={() => scrollToJoin('apply')} />
 
         <DefaultStackSection />
 
         <CompareSection />
 
-        <PricingSection onDemo={goToDemo} onApply={() => scrollToJoin('apply')} />
+        <PricingSection onDemo={goToDemo} onStartTrial={() => scrollToJoin('apply')} />
 
         <ProofSection />
 
@@ -317,7 +377,7 @@ const App: React.FC = () => {
       </main>
 
       <Footer />
-      <MobileBottomCta onDemo={goToDemo} />
+      <MobileBottomCta onStartTrial={() => scrollToJoin('apply')} />
     </div>
   );
 };
@@ -332,6 +392,30 @@ function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
   useEffect(() => {
     if (typeof window !== 'undefined') window.scrollTo(0, 0);
   }, []);
+
+  const goToTrial = () => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.set('cta', 'apply');
+    const qs = params.toString();
+    window.location.assign(`/${qs ? `?${qs}` : ''}`);
+  };
+
+  const calendlyEmbedUrl = useMemo(() => {
+    // Preserve UTMs into the Calendly embed so you can attribute bookings.
+    try {
+      const u = new URL(calendlyUrl);
+      const utm = getUtmFromUrl();
+      Object.entries(utm).forEach(([k, v]) => u.searchParams.set(k, v));
+
+      // Keep the embed clean.
+      u.searchParams.set('hide_landing_page_details', '1');
+      u.searchParams.set('hide_gdpr_banner', '1');
+      return u.toString();
+    } catch {
+      return calendlyUrl;
+    }
+  }, [calendlyUrl]);
 
   const backToSite = () => {
     if (typeof window === 'undefined') return;
@@ -380,14 +464,27 @@ function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
                 Schedule a 30‑minute walkthrough
               </h1>
               <p className="mt-3 text-sm text-neutral-700">
-                We&apos;ll focus on the weekly loop: Weekly Reports → Accept‑Week, Pocket Coach, and guardrails.
+                We&apos;ll focus on the weekly loop: Weekly Reports → Accept‑Week, Pocket Coach replans, and evidence-based guardrails.
               </p>
+
+              <ul className="mt-4 space-y-2 text-sm text-neutral-800">
+                <li>• Review your current workflow (Sheets / TrueCoach / Everfit)</li>
+                <li>• Walk one client through the loop end‑to‑end</li>
+                <li>• Decide if it can cut weekly time without lowering standards</li>
+              </ul>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <PrimaryButton onClick={goToTrial}>Start free trial</PrimaryButton>
+                <p className="text-xs text-neutral-500">
+                  {TRIAL_DAYS}-day trial · start with {TRIAL_STARTER_CLIENTS} clients.
+                </p>
+              </div>
             </div>
 
             <div className="mt-8 overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm">
               <iframe
                 title="Book a demo with Lungeable (Calendly)"
-                src={calendlyUrl}
+                src={calendlyEmbedUrl}
                 className="w-full"
                 style={{ height: 'calc(100vh - 260px)', minHeight: 720 }}
                 loading="lazy"
@@ -398,7 +495,7 @@ function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
             <p className="mt-4 text-xs text-neutral-500">
               If the embed doesn&apos;t load, use{' '}
               <a
-                href={calendlyUrl}
+                href={calendlyEmbedUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="underline decoration-black/20 underline-offset-4 hover:decoration-black/40"
@@ -407,6 +504,30 @@ function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
               </a>
               .
             </p>
+
+            <div className="mt-10 rounded-3xl border border-black/10 bg-[#f5f5f7] p-6">
+              <p className="text-sm font-semibold text-neutral-900">No times work?</p>
+              <p className="mt-2 text-sm text-neutral-700">
+                Drop your email and we&apos;ll send beta access + setup details. You can also start the {TRIAL_DAYS}-day free trial right away.
+              </p>
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <PrimaryButton onClick={goToTrial} className="w-full justify-center">
+                    Start free trial
+                  </PrimaryButton>
+                  <p className="mt-2 text-xs text-neutral-500">No migration required. Start with {TRIAL_STARTER_CLIENTS} clients.</p>
+                </div>
+
+                <div className="rounded-3xl border border-black/10 bg-white p-5">
+                  <CoachSignupForm
+                    mode="apply"
+                    variant="compact"
+                    sourceOverride="coach-demo-fallback"
+                    submitLabel="Email me access"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </Container>
       </main>
@@ -424,7 +545,29 @@ function DemoPage({ calendlyUrl }: { calendlyUrl: string }) {
 /* Header                                                                      */
 /* -------------------------------------------------------------------------- */
 
-function Header({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) {
+function AnnouncementBar({ onStartTrial }: { onStartTrial: () => void }) {
+  return (
+    <div className="border-b border-black/10 bg-[#f5f5f7]">
+      <Container>
+        <div className="flex min-h-[40px] items-center justify-between gap-3 py-2 text-xs text-neutral-700">
+          <p className="leading-snug">
+            <span className="font-semibold text-neutral-900">Coach beta:</span> {TRIAL_DAYS}-day free trial for new
+            coaches · founding price locked for life.
+          </p>
+          <button
+            type="button"
+            onClick={onStartTrial}
+            className="whitespace-nowrap font-semibold text-black underline decoration-black/20 underline-offset-4 hover:decoration-black/40"
+          >
+            Start free trial →
+          </button>
+        </div>
+      </Container>
+    </div>
+  );
+}
+
+function Header({ onDemo, onStartTrial }: { onDemo: () => void; onStartTrial: () => void }) {
   return (
     <header className="safe-pt sticky top-0 z-50 border-b border-black/10 bg-white/90 backdrop-blur">
       <Container>
@@ -456,13 +599,13 @@ function Header({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={onApply}
+                onClick={onDemo}
                 className="hidden text-sm font-semibold text-neutral-700 hover:text-black sm:inline-flex"
               >
-                Apply
-              </button>
-              <PrimaryButton onClick={onDemo} className="px-5 py-2 text-sm">
                 Book a demo
+              </button>
+              <PrimaryButton onClick={onStartTrial} className="px-5 py-2 text-sm">
+                Start free trial
               </PrimaryButton>
             </div>
           </div>
@@ -476,7 +619,13 @@ function Header({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }
 /* Hero                                                                        */
 /* -------------------------------------------------------------------------- */
 
-function Hero({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) {
+function Hero({
+  onDemo,
+  onStartTrial,
+}: {
+  onDemo: () => void;
+  onStartTrial: () => void;
+}) {
   return (
     <Band id="coach" tone="paper">
       <Container>
@@ -488,7 +637,7 @@ function Hero({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) 
               <br />
               Adjust in seconds.
             </h1>
-            <p className="mt-4 text-sm text-neutral-700">
+            <p className="mt-4 text-base leading-relaxed text-neutral-700">
               Lungeable drafts weeks with evidence‑based guardrails, turns check‑ins into clear Weekly Reports, and
               gives you a tuned next‑week draft you can <span className="font-semibold">Accept‑Week</span>—without
               rewriting 20 plans every Sunday.
@@ -501,14 +650,14 @@ function Hero({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) 
             </ul>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
-              <PrimaryButton onClick={onDemo}>Book a demo</PrimaryButton>
+              <PrimaryButton onClick={onStartTrial}>Start free trial</PrimaryButton>
 
               <button
                 type="button"
-                onClick={onApply}
+                onClick={onDemo}
                 className="min-h-[44px] rounded-full border border-black/15 bg-white px-6 py-2.5 text-sm font-semibold text-black hover:bg-neutral-50"
               >
-                Apply for early access
+                Book a demo
               </button>
 
               <SecondaryLink href="#how">See how it works →</SecondaryLink>
@@ -516,9 +665,22 @@ function Hero({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) 
 
             {/* Proof artifact above the fold (honest, lightweight) */}
             <p className="mt-4 text-xs text-neutral-600">
-              Try it with <span className="font-semibold">3 clients</span> first. No migration required.
+              Try it free for <span className="font-semibold">{TRIAL_DAYS} days</span> — start with{' '}
+              <span className="font-semibold">{TRIAL_STARTER_CLIENTS} clients</span>. No migration required.
             </p>
             <p className="mt-2 text-xs text-neutral-500">Cohort pilots: we measure time saved + adherence weekly.</p>
+
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-neutral-600">
+              <a className="font-semibold hover:text-black" href="#weekly">
+                Weekly Reports
+              </a>
+              <a className="font-semibold hover:text-black" href="#pocket">
+                Pocket Coach
+              </a>
+              <a className="font-semibold hover:text-black" href="#pricing">
+                Pricing
+              </a>
+            </div>
           </div>
 
           <div className="relative">
@@ -565,7 +727,7 @@ function WhySwitch() {
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
             Sell coaching — not spreadsheets.
           </h2>
-          <p className="mt-3 text-sm text-neutral-700">
+          <p className="mt-3 text-base leading-relaxed text-neutral-700">
             Lungeable is purpose-built for remote strength/physique coaches with ~10–50 clients who are drowning in
             weekly edits.
           </p>
@@ -593,7 +755,13 @@ function WhySwitch() {
 /* Band 3: How it works (4-step loop)                                          */
 /* -------------------------------------------------------------------------- */
 
-function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) {
+function HowItWorks({
+  onDemo,
+  onStartTrial,
+}: {
+  onDemo: () => void;
+  onStartTrial: () => void;
+}) {
   const steps = useMemo(
     () =>
       [
@@ -651,7 +819,9 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
                     seedGoal="build"
                     seedMinutes={45}
                     seedEquipment={['db', 'barbell']}
-                    onJoin={onApply}
+                    onJoin={onStartTrial}
+                    trialDays={TRIAL_DAYS}
+                    trialStarterClients={TRIAL_STARTER_CLIENTS}
                   />
                 </DeviceScene>
 
@@ -668,10 +838,12 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
                     <p className="text-sm font-semibold">Accept‑Week</p>
                     <p className="mt-1 text-sm text-neutral-700">Commit next week in one click after a fast review.</p>
                     <div className="mt-4">
-                      <PrimaryButton onClick={onDemo} className="w-full justify-center">
-                        Book a demo
+                      <PrimaryButton onClick={onStartTrial} className="w-full justify-center">
+                        Start free trial
                       </PrimaryButton>
-                      <p className="mt-2 text-[11px] text-neutral-500">Accept commits the week — you can tweak anything first.</p>
+                      <p className="mt-2 text-[11px] text-neutral-500">
+                        {TRIAL_DAYS}-day free trial · start with {TRIAL_STARTER_CLIENTS} clients.
+                      </p>
                     </div>
                   </div>
                 </DeviceScene>
@@ -685,7 +857,7 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
               <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
                 The loop: draft, adapt, report, accept.
               </h2>
-              <p className="mt-3 text-sm text-neutral-700">
+              <p className="mt-3 text-base leading-relaxed text-neutral-700">
                 Your clients just train. You get a clean weekly workflow that keeps quality consistent without burning your evenings.
               </p>
 
@@ -712,9 +884,18 @@ function HowItWorks({ onDemo, onApply }: { onDemo: () => void; onApply: () => vo
               })}
 
               <div className="pt-4">
-                <PrimaryButton onClick={onDemo} className="px-5">
-                  Book a demo →
-                </PrimaryButton>
+                <div className="flex flex-wrap items-center gap-3">
+                  <PrimaryButton onClick={onStartTrial} className="px-5">
+                    Start free trial →
+                  </PrimaryButton>
+                  <button
+                    type="button"
+                    onClick={onDemo}
+                    className="text-sm font-semibold text-neutral-700 hover:text-black"
+                  >
+                    Book a demo
+                  </button>
+                </div>
                 <p className="mt-2 text-xs text-neutral-500">Founding coaches get direct input into roadmap and pricing.</p>
               </div>
             </div>
@@ -776,7 +957,13 @@ function StepProgress({ activeId, stepIds }: { activeId: ScrollStepId; stepIds: 
 /* Band 4: Weekly Reports deep dive                                            */
 /* -------------------------------------------------------------------------- */
 
-function WeeklyReportsDeepDive({ onDemo }: { onDemo: () => void }) {
+function WeeklyReportsDeepDive({
+  onDemo,
+  onStartTrial,
+}: {
+  onDemo: () => void;
+  onStartTrial: () => void;
+}) {
   return (
     <Band id="weekly" tone="dark">
       <Container>
@@ -790,7 +977,7 @@ function WeeklyReportsDeepDive({ onDemo }: { onDemo: () => void }) {
               <br />
               Approve the next.
             </h2>
-            <p className="mt-3 text-sm text-white/70">
+            <p className="mt-3 text-base leading-relaxed text-white/70">
               This is the signature moment. See what happened, what changes next week, and why — then commit it in one tap.
             </p>
 
@@ -803,14 +990,18 @@ function WeeklyReportsDeepDive({ onDemo }: { onDemo: () => void }) {
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={onDemo}
+                onClick={onStartTrial}
                 className="min-h-[44px] rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black hover:bg-neutral-100"
               >
-                Book a demo
+                Start free trial
               </button>
-              <a href="#compare" className="text-sm font-semibold text-white/70 hover:text-white">
-                Compare it to your current stack →
-              </a>
+              <button
+                type="button"
+                onClick={onDemo}
+                className="text-sm font-semibold text-white/70 hover:text-white"
+              >
+                Or book a demo →
+              </button>
             </div>
 
             <p className="mt-3 text-xs text-white/55">
@@ -833,7 +1024,13 @@ function WeeklyReportsDeepDive({ onDemo }: { onDemo: () => void }) {
 /* Band 5: Pocket Coach deep dive                                              */
 /* -------------------------------------------------------------------------- */
 
-function PocketCoachDeepDive({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) {
+function PocketCoachDeepDive({
+  onDemo,
+  onStartTrial,
+}: {
+  onDemo: () => void;
+  onStartTrial: () => void;
+}) {
   return (
     <Band id="pocket" tone="paper">
       <Container>
@@ -843,7 +1040,7 @@ function PocketCoachDeepDive({ onDemo, onApply }: { onDemo: () => void; onApply:
             <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
               DM‑driven replans — constrained by your rules.
             </h2>
-            <p className="mt-3 text-sm text-neutral-700">
+            <p className="mt-3 text-base leading-relaxed text-neutral-700">
               Pocket Coach is not “black box AI.” It proposes session-level changes that preserve anchors and exposure targets,
               then waits for your approval.
             </p>
@@ -855,9 +1052,13 @@ function PocketCoachDeepDive({ onDemo, onApply }: { onDemo: () => void; onApply:
             </ul>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
-              <PrimaryButton onClick={onDemo}>Book a demo</PrimaryButton>
-              <button type="button" onClick={onApply} className="text-sm font-semibold text-neutral-700 hover:text-black">
-                Or apply →
+              <PrimaryButton onClick={onStartTrial}>Start free trial</PrimaryButton>
+              <button
+                type="button"
+                onClick={onDemo}
+                className="text-sm font-semibold text-neutral-700 hover:text-black"
+              >
+                Or book a demo →
               </button>
             </div>
           </div>
@@ -875,7 +1076,13 @@ function PocketCoachDeepDive({ onDemo, onApply }: { onDemo: () => void; onApply:
 /* Band 6: Coach Desk deep dive                                                */
 /* -------------------------------------------------------------------------- */
 
-function CoachDeskDeepDive({ onDemo }: { onDemo: () => void; onApply: () => void }) {
+function CoachDeskDeepDive({
+  onDemo,
+  onStartTrial,
+}: {
+  onDemo: () => void;
+  onStartTrial: () => void;
+}) {
   return (
     <Band id="desk" tone="soft">
       <Container>
@@ -885,7 +1092,7 @@ function CoachDeskDeepDive({ onDemo }: { onDemo: () => void; onApply: () => void
             <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
               A roster view that tells you who needs action.
             </h2>
-            <p className="mt-3 text-sm text-neutral-700">
+            <p className="mt-3 text-base leading-relaxed text-neutral-700">
               Coach Desk is triage: missed sessions, rising RPE, unanswered DMs, and clients ready for Accept‑Week — in one place.
             </p>
 
@@ -895,8 +1102,11 @@ function CoachDeskDeepDive({ onDemo }: { onDemo: () => void; onApply: () => void
               <li>• Designed to keep you moving fast without losing quality.</li>
             </ul>
 
-            <div className="mt-7">
-              <PrimaryButton onClick={onDemo}>Book a demo</PrimaryButton>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <PrimaryButton onClick={onStartTrial}>Start free trial</PrimaryButton>
+              <button type="button" onClick={onDemo} className="text-sm font-semibold text-neutral-700 hover:text-black">
+                Or book a demo →
+              </button>
             </div>
           </div>
 
@@ -922,8 +1132,13 @@ function DefaultStackSection() {
     { label: 'Content', value: 'Notion, Google Docs, Loom' },
     { label: 'Community', value: 'Discord, Slack, WhatsApp, Telegram' },
     { label: 'Spreadsheets', value: 'Google Sheets (if you want)' },
-    { label: 'Lungeable', value: 'Plans, logging, Pocket Coach, Weekly Reports, Accept‑Week' },
-  ];
+    {
+      label: 'Lungeable',
+      value: 'Plans, logging, Pocket Coach, Weekly Reports, Accept‑Week',
+      highlight: true,
+      note: 'The weekly training loop, end‑to‑end — plugs into your existing business stack.',
+    },
+  ] as const;
 
   return (
     <Band id="default-stack" tone="paper">
@@ -931,26 +1146,50 @@ function DefaultStackSection() {
         <div className="max-w-2xl">
           <Kicker>Default stack</Kicker>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-            Keep your stack. Upgrade the training brain.
+            Keep your stack. <span className="font-semibold underline decoration-black/10 underline-offset-4">Upgrade the training brain.</span>
           </h2>
-          <p className="mt-3 text-sm text-neutral-700">
+          <p className="mt-3 text-base leading-relaxed text-neutral-700">
             Lungeable is deliberately narrow: it&apos;s the training OS (plans + reporting + DM-driven replans) — not your payments,
             marketing, or content platform.
           </p>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {items.map((it) => (
-            <div key={it.label} className="rounded-3xl border border-black/10 bg-white p-5">
-              <p className="text-xs font-semibold text-neutral-500">{it.label}</p>
-              <p className="mt-2 text-sm font-semibold text-neutral-900">{it.value}</p>
-            </div>
-          ))}
+          {items.map((it) => {
+            const isHighlight = Boolean((it as any).highlight);
+            const note = (it as any).note as string | undefined;
+
+            return (
+              <div
+                key={it.label}
+                className={`rounded-3xl border p-5 ${
+                  isHighlight
+                    ? 'md:col-span-2 border-white/10 bg-black text-white'
+                    : 'border-black/10 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className={`text-xs font-semibold ${isHighlight ? 'text-white/60' : 'text-neutral-500'}`}>
+                    {it.label}
+                  </p>
+                  {isHighlight ? (
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white/80">
+                      Recommended
+                    </span>
+                  ) : null}
+                </div>
+                <p className={`mt-2 text-sm font-semibold ${isHighlight ? 'text-white' : 'text-neutral-900'}`}>
+                  {it.value}
+                </p>
+                {isHighlight && note ? <p className="mt-2 text-xs text-white/70">{note}</p> : null}
+              </div>
+            );
+          })}
         </div>
 
         <p className="mt-5 text-xs text-neutral-500">
-          Honest note: if you want payments, habits, media libraries and marketing pages in one place, an all‑in‑one platform may fit better.
-          Lungeable wins when you care about the weekly training loop.
+          This is intentionally “keep your business stack, upgrade the training brain.” If you want an all‑in‑one platform for payments,
+          habits, content, and marketing pages, Lungeable is not trying to win that category.
         </p>
       </Container>
     </Band>
@@ -1014,7 +1253,7 @@ function CompareSection() {
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
             Respectful trade‑offs, clear positioning.
           </h2>
-          <p className="mt-3 text-sm text-neutral-700">
+          <p className="mt-3 text-base leading-relaxed text-neutral-700">
             TrueCoach and Everfit are strong all‑in‑one platforms. Lungeable is narrower on purpose: the training OS that makes weekly programming and check‑ins dramatically faster.
           </p>
         </div>
@@ -1030,10 +1269,25 @@ function CompareSection() {
               </tr>
             </thead>
             <tbody className="divide-y divide-black/10">
-              {rows.map((r) => (
-                <tr key={r.tool} className={r.highlight ? 'bg-black/[0.02]' : ''}>
-                  <td className="py-4 px-4 font-semibold text-neutral-900">{r.tool}</td>
-                  <td className="py-4 px-4 text-neutral-800">{r.bestFor}</td>
+              {rows.map((r) => {
+                const isHighlight = Boolean(r.highlight);
+                return (
+                  <tr key={r.tool} className={isHighlight ? 'bg-black/[0.03]' : ''}>
+                    <td
+                      className={`py-4 font-semibold text-neutral-900 ${
+                        isHighlight ? 'border-l-4 border-black/70 pl-3 pr-4' : 'px-4'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="whitespace-nowrap">{r.tool}</span>
+                        {isHighlight ? (
+                          <span className="rounded-full bg-black px-2 py-1 text-[10px] font-semibold text-white">
+                            Recommended
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-neutral-800">{r.bestFor}</td>
                   <td className="py-4 px-4">
                     <ul className="space-y-1 text-neutral-800">
                       {r.shines.map((x) => (
@@ -1048,8 +1302,9 @@ function CompareSection() {
                       ))}
                     </ul>
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1066,7 +1321,13 @@ function CompareSection() {
 /* Pricing                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function PricingSection({ onDemo, onApply }: { onDemo: () => void; onApply: () => void }) {
+function PricingSection({
+  onDemo,
+  onStartTrial,
+}: {
+  onDemo: () => void;
+  onStartTrial: () => void;
+}) {
   return (
     <Band id="pricing" tone="paper">
       <Container>
@@ -1075,7 +1336,7 @@ function PricingSection({ onDemo, onApply }: { onDemo: () => void; onApply: () =
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
             Simple while we&apos;re in coach beta.
           </h2>
-          <p className="mt-3 text-sm text-neutral-700">
+          <p className="mt-3 text-base leading-relaxed text-neutral-700">
             If Lungeable doesn&apos;t save you at least <span className="font-semibold">one check‑in&apos;s worth of time</span>{' '}
             each month, you shouldn&apos;t keep it.
           </p>
@@ -1102,39 +1363,51 @@ function PricingSection({ onDemo, onApply }: { onDemo: () => void; onApply: () =
               <li>• Exportable plans and data</li>
             </ul>
 
-            <PrimaryButton onClick={onDemo} className="mt-6 w-full justify-center">
-              Book a demo
+            <PrimaryButton onClick={onStartTrial} className="mt-6 w-full justify-center">
+              Start free trial
             </PrimaryButton>
 
             <button
               type="button"
-              onClick={onApply}
+              onClick={onDemo}
               className="mt-3 w-full rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-black/[0.03]"
             >
-              Apply for early access
+              Book a demo
             </button>
 
             <p className="mt-3 text-xs text-neutral-600">
-              No hard sell. If it&apos;s a fit, we onboard coaches in small cohorts.
+              {TRIAL_DAYS}-day free trial for new coaches. If it’s a fit, we’ll suggest a 3–10 client pilot.
             </p>
           </div>
 
           <div className="rounded-3xl border border-black/10 bg-white p-6">
-            <p className="text-sm font-semibold text-neutral-900">Later, public tiers look like:</p>
-            <ul className="mt-3 space-y-2 text-sm text-neutral-800">
-              <li>
-                • <span className="font-semibold">Coach Start</span> — up to 10 clients, around $29/mo
-              </li>
-              <li>
-                • <span className="font-semibold">Coach Grow</span> — up to 25 clients, around $59/mo
-              </li>
-              <li>
-                • <span className="font-semibold">Coach Scale</span> — up to 50 clients, around $99/mo
-              </li>
-            </ul>
-            <p className="mt-3 text-sm text-neutral-700">
-              Exact tiers may shift as we learn from early coaches, but the philosophy stays: priced like a serious tool, anchored to how many clients you actually run through Lungeable.
+            <p className="text-sm font-semibold text-neutral-900">Founding coach expectations</p>
+            <p className="mt-2 text-sm text-neutral-700">
+              We keep pricing low during beta in exchange for high-signal feedback. If you’re in, we ask that you:
             </p>
+            <ul className="mt-3 space-y-2 text-sm text-neutral-800">
+              <li>• Run at least 10 clients through Lungeable</li>
+              <li>• Give blunt feedback on what’s great and what’s broken</li>
+              <li>• Let us measure time saved on programming + check-ins</li>
+            </ul>
+
+            <div className="mt-5 rounded-2xl border border-black/10 bg-[#f5f5f7] p-4">
+              <p className="text-xs font-semibold text-neutral-700">Later, public tiers may look like:</p>
+              <ul className="mt-2 space-y-1.5 text-xs text-neutral-700">
+                <li>
+                  • <span className="font-semibold">Coach Start</span> — up to 10 clients, around $29/mo
+                </li>
+                <li>
+                  • <span className="font-semibold">Coach Grow</span> — up to 25 clients, around $59/mo
+                </li>
+                <li>
+                  • <span className="font-semibold">Coach Scale</span> — up to 50 clients, around $99/mo
+                </li>
+              </ul>
+              <p className="mt-2 text-[11px] text-neutral-500">
+                Exact tiers may shift as we learn from early coaches. Founding price stays locked for founding coaches.
+              </p>
+            </div>
           </div>
         </div>
       </Container>
@@ -1174,7 +1447,7 @@ function ProofSection() {
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
             Proof you can measure — not hype.
           </h2>
-          <p className="mt-3 text-sm text-neutral-700">
+          <p className="mt-3 text-base leading-relaxed text-neutral-700">
             Early access runs as cohort pilots. We’ll track time saved, adherence, and safety signals weekly so you can decide with data.
           </p>
         </div>
@@ -1214,82 +1487,118 @@ function JoinSection({
   onModeChange: (mode: CtaMode) => void;
   onDemo: () => void;
 }) {
-  const isDemo = mode === 'demo';
+  const preferDemo = mode === 'demo';
 
   return (
     <Band id="join" tone="paper" className="safe-pb">
       <Container>
         <div className="max-w-2xl">
           <Kicker>Next step</Kicker>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-            {isDemo ? 'Book a demo.' : 'Apply for early access.'}
-          </h2>
-          <p className="mt-3 text-sm text-neutral-700">
-            {isDemo
-              ? 'Pick a time for a short walkthrough. We’ll focus on Weekly Reports → Accept‑Week, Pocket Coach, and Coach Desk.'
-              : 'We onboard in small batches so we can support you properly and tune the product around real workflows.'}
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Two simple paths.</h2>
+          <p className="mt-3 text-base leading-relaxed text-neutral-700">
+            Start a {TRIAL_DAYS}-day free trial (best for most coaches), or book a walkthrough if you prefer a live tour.
           </p>
+        </div>
 
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          {/* Trial / email capture */}
           <div
-            className="mt-6 inline-flex rounded-full border border-black/10 bg-[#f5f5f7] p-1"
-            role="tablist"
-            aria-label="Choose demo or early access"
+            className={`rounded-3xl border p-6 ${
+              preferDemo ? 'border-black/10 bg-[#f5f5f7]' : 'border-black/20 bg-[#f5f5f7]'
+            }`}
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isDemo}
-              onClick={() => onModeChange('demo')}
-              className={`min-h-[40px] rounded-full px-4 text-sm font-semibold transition-colors ${
-                isDemo ? 'bg-white text-black shadow-sm' : 'text-neutral-700 hover:text-black'
-              }`}
-            >
-              Book demo
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!isDemo}
-              onClick={() => onModeChange('apply')}
-              className={`min-h-[40px] rounded-full px-4 text-sm font-semibold transition-colors ${
-                !isDemo ? 'bg-white text-black shadow-sm' : 'text-neutral-700 hover:text-black'
-              }`}
-            >
-              Apply
-            </button>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-600">Free trial</p>
+                <h3 className="mt-2 text-lg font-semibold tracking-tight text-neutral-900">
+                  Start your {TRIAL_DAYS}-day trial
+                </h3>
+                <p className="mt-2 text-sm text-neutral-700">
+                  Start with {TRIAL_STARTER_CLIENTS} clients. No migration required. We’ll email setup details and beta access.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onModeChange('apply')}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
+                  preferDemo ? 'border-black/10 bg-white text-neutral-700' : 'border-black/20 bg-white text-black'
+                }`}
+              >
+                {preferDemo ? 'Select' : 'Selected'}
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <CoachSignupForm mode="apply" autoFocusEmail={!preferDemo} />
+            </div>
           </div>
 
-          <p className="mt-2 text-xs text-neutral-500">
-            {isDemo ? 'Prefer async? You can apply instead.' : 'Prefer a quick walkthrough first? Book a demo.'}
-          </p>
-        </div>
-
-        <div className="mt-8 rounded-3xl border border-black/10 bg-[#f5f5f7] p-6">
-          {isDemo ? (
-            <div className="rounded-3xl border border-black/10 bg-white p-6">
-              <p className="text-sm font-semibold text-neutral-900">30‑minute walkthrough</p>
-              <p className="mt-2 text-sm text-neutral-700">
-                We’ll show the Weekly Report → Accept‑Week loop, Pocket Coach replans, and the guardrails model.
-              </p>
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <PrimaryButton onClick={onDemo}>Book a demo</PrimaryButton>
-                <a
-                  href={CALENDLY_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm font-semibold text-neutral-700 hover:text-black"
-                >
-                  Open in Calendly →
-                </a>
+          {/* Demo */}
+          <div
+            className={`rounded-3xl border p-6 ${
+              preferDemo ? 'border-black/20 bg-white' : 'border-black/10 bg-white'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-600">Book a demo</p>
+                <h3 className="mt-2 text-lg font-semibold tracking-tight text-neutral-900">30‑minute walkthrough</h3>
+                <p className="mt-2 text-sm text-neutral-700">
+                  We’ll show Weekly Reports → Accept‑Week, Pocket Coach replans, and how guardrails enforce your rules.
+                </p>
               </div>
-              <p className="mt-3 text-xs text-neutral-500">No hard sell. If it’s a fit, we’ll suggest a 3–10 client pilot.</p>
+
+              <button
+                type="button"
+                onClick={() => onModeChange('demo')}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
+                  preferDemo ? 'border-black/20 bg-[#f5f5f7] text-black' : 'border-black/10 bg-[#f5f5f7] text-neutral-700'
+                }`}
+              >
+                {preferDemo ? 'Selected' : 'Select'}
+              </button>
             </div>
-          ) : (
-            <CoachSignupForm mode={mode} />
-          )}
+
+            <ul className="mt-4 space-y-2 text-sm text-neutral-800">
+              <li>• Review your current workflow (Sheets / TrueCoach / Everfit)</li>
+              <li>• Walk one client through the weekly loop end‑to‑end</li>
+              <li>• Decide if it can cut time without lowering standards</li>
+            </ul>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <PrimaryButton
+                onClick={() => {
+                  onModeChange('demo');
+                  onDemo();
+                }}
+              >
+                Book a demo
+              </PrimaryButton>
+              <a
+                href={CALENDLY_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-semibold text-neutral-700 hover:text-black"
+              >
+                Open in Calendly →
+              </a>
+            </div>
+
+            <p className="mt-3 text-xs text-neutral-500">No hard sell. If it’s not a fit, we’ll say so.</p>
+          </div>
         </div>
 
-        <p className="mt-3 text-xs text-neutral-500">We’ll never sell your data. You can ask to be removed at any time.</p>
+        <p className="mt-5 text-xs text-neutral-500">
+          We’ll never sell your data. Questions? Email{' '}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="underline decoration-black/20 underline-offset-4 hover:decoration-black/40"
+          >
+            {SUPPORT_EMAIL}
+          </a>
+          .
+        </p>
       </Container>
     </Band>
   );
@@ -1297,11 +1606,111 @@ function JoinSection({
 
 type FormState = 'idle' | 'submitting' | 'success' | 'error';
 
-function CoachSignupForm({ mode }: { mode: CtaMode }) {
+function CoachSignupForm({
+  mode,
+  variant = 'full',
+  sourceOverride,
+  submitLabel,
+  autoFocusEmail = false,
+}: {
+  mode: CtaMode;
+  variant?: 'full' | 'compact';
+  sourceOverride?: string;
+  submitLabel?: string;
+  autoFocusEmail?: boolean;
+}) {
+  const isCompact = variant === 'compact';
+  const idleCtaLabel = submitLabel || (mode === 'apply' ? 'Start free trial' : 'Join the list');
   const [state, setState] = useState<FormState>('idle');
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [alreadyOnList, setAlreadyOnList] = useState(false);
+
+  /**
+   * Honeypot: hidden input that real users will not fill.
+   * Many bots fill every field they see, including hidden ones.
+   */
+  const [company, setCompany] = useState('');
+
+  /**
+   * Cloudflare Turnstile (optional, but recommended).
+   * If TURNSTILE_SITE_KEY is not set, we simply skip CAPTCHA.
+   */
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+
+  const resetTurnstile = () => {
+    if (!TURNSTILE_SITE_KEY) return;
+    try {
+      const widgetId = turnstileWidgetIdRef.current ?? undefined;
+      window.turnstile?.reset?.(widgetId);
+    } catch {
+      // ignore
+    }
+    setTurnstileToken('');
+  };
+
+  // Render Turnstile widget once (if enabled)
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY) return;
+    if (typeof window === 'undefined') return;
+
+    const mount = turnstileContainerRef.current;
+    if (!mount) return;
+
+    let disposed = false;
+    let poll: number | null = null;
+
+    const tryRender = () => {
+      if (disposed) return false;
+      const ts = window.turnstile;
+      if (!ts?.render) return false;
+
+      // Clear any existing widget DOM
+      mount.innerHTML = '';
+
+      const widgetId = ts.render(mount, {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme: 'light',
+        callback: (token: unknown) => setTurnstileToken(String(token || '')),
+        'expired-callback': () => setTurnstileToken(''),
+        'error-callback': () => setTurnstileToken(''),
+      });
+
+      turnstileWidgetIdRef.current = widgetId;
+      return true;
+    };
+
+    // Render immediately if the script is already loaded
+    if (tryRender()) {
+      return () => {
+        disposed = true;
+        try {
+          const wid = turnstileWidgetIdRef.current;
+          if (wid && window.turnstile?.remove) window.turnstile.remove(wid);
+        } catch {
+          // ignore
+        }
+      };
+    }
+
+    // Otherwise poll briefly until the script loads
+    poll = window.setInterval(() => {
+      if (tryRender() && poll) window.clearInterval(poll);
+    }, 250);
+
+    return () => {
+      disposed = true;
+      if (poll) window.clearInterval(poll);
+      try {
+        const wid = turnstileWidgetIdRef.current;
+        if (wid && window.turnstile?.remove) window.turnstile.remove(wid);
+      } catch {
+        // ignore
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1316,6 +1725,28 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError('Please enter a valid email.');
+      return;
+    }
+
+    // Honeypot hit -> silently accept (do NOT insert anything, do NOT show an error)
+    // This reduces signal to automated spam.
+    if (company.trim()) {
+      setAlreadyOnList(false);
+      setState('success');
+      setEmail('');
+      setCompany('');
+      try {
+        e.currentTarget.reset();
+      } catch {
+        // ignore
+      }
+      resetTurnstile();
+      return;
+    }
+
+    // If Turnstile is enabled, require a token.
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError('Please complete the verification and try again.');
       return;
     }
 
@@ -1346,8 +1777,8 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
       notes: (formData.get('notes') || '')?.toString() || null,
 
       // Store request type safely:
-      source: mode === 'apply' ? 'coach-landing' : 'coach-landing-demo',
-      site_version: `${SITE_VERSION}:${mode}`,
+      source: sourceOverride || (mode === 'apply' ? 'coach-trial' : 'coach-demo'),
+      site_version: `${SITE_VERSION}:${sourceOverride || mode}:${variant}`,
 
       // Attribution / analytics:
       utm,
@@ -1357,45 +1788,98 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
     };
 
     try {
-      const { error: supaError } = await supabase.from('leads_coach_waitlist').insert(payload);
+      /**
+       * IMPORTANT:
+       * We do NOT insert directly from the browser anymore.
+       * Instead, we call an Edge Function that:
+       *  - verifies Turnstile server-side
+       *  - rate limits / blocks spam patterns (optional)
+       *  - inserts using a service role key (so anon never has DB write access)
+       *
+       * Edge Function name defaults to "coach-waitlist-signup"
+       * (override with VITE_COACH_WAITLIST_SIGNUP_FN if desired)
+       */
+      const { data, error: fnError } = await supabase.functions.invoke(COACH_WAITLIST_SIGNUP_FN, {
+        body: {
+          ...payload,
+          turnstile_token: TURNSTILE_SITE_KEY ? turnstileToken : null,
+          honeypot: company || null,
+        },
+      });
 
-      // 23505 = unique violation (email already exists). Treat as soft-success.
-      if (supaError && supaError.code !== '23505') {
+      if (fnError) {
         // eslint-disable-next-line no-console
-        console.error('Supabase insert error', supaError);
+        console.error('Waitlist Edge Function error', fnError);
 
-        const msg = (supaError.message || '').toLowerCase();
-        if (msg.includes('row-level security')) {
-          setError('Database blocked the insert (RLS policy). Add an INSERT policy for anon on leads_coach_waitlist.');
-        } else if (supaError.code === '23514') {
-          setError('Database rejected the form values (check constraint). Verify coach_intents values match allowed list.');
+        const msgLower = (fnError.message || '').toLowerCase();
+        if (msgLower.includes('not found')) {
+          setError('Waitlist endpoint not found. Deploy the Edge Function "coach-waitlist-signup".');
+        } else if (msgLower.includes('unauthorized') || msgLower.includes('jwt')) {
+          setError('Waitlist endpoint rejected the request. Ensure verify_jwt = false for this function.');
         } else if (import.meta.env.DEV) {
-          setError(`Something went wrong (${supaError.code}): ${supaError.message}`);
+          setError(`Waitlist submit failed: ${fnError.message}`);
         } else {
           setError('Something went wrong. Please refresh and try again.');
         }
 
         setState('error');
+        resetTurnstile();
         return;
       }
 
-      if (supaError?.code === '23505') {
-        setAlreadyOnList(true);
+      const d = (data || {}) as Record<string, unknown>;
+
+      // If the function returns ok:false, treat as an error.
+      if (d.ok === false) {
+        const errCode = String(d.code || d.error || 'unknown');
+        if (errCode.includes('turnstile')) {
+          setError('Verification failed. Please try again.');
+        } else if (import.meta.env.DEV) {
+          setError(`Waitlist submit failed: ${JSON.stringify(d)}`);
+        } else {
+          setError('Something went wrong. Please refresh and try again.');
+        }
+        setState('error');
+        resetTurnstile();
+        return;
       }
+
+      const isDuplicate = Boolean(d.already_on_list || d.alreadyOnList || d.duplicate);
+      if (isDuplicate) setAlreadyOnList(true);
 
       setState('success');
       setEmail('');
+      setCompany('');
       form.reset();
+      resetTurnstile();
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('Supabase form submit error', err);
+      console.error('Waitlist form submit error', err);
       setState('error');
-      setError(import.meta.env.DEV ? `Something went wrong: ${String(err)}` : 'Something went wrong. Please refresh and try again.');
+      setError(
+        import.meta.env.DEV ? `Something went wrong: ${String(err)}` : 'Something went wrong. Please refresh and try again.'
+      );
+      resetTurnstile();
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5" aria-live="polite" noValidate>
+      {/* Honeypot: hidden field (bots often fill it, humans never see it). */}
+      <div className="hidden" aria-hidden="true">
+        <label>
+          Company
+          <input
+            name="company"
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+          />
+        </label>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
           <span className="text-xs font-semibold text-neutral-700">Email (required)</span>
@@ -1404,6 +1888,7 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
             type="email"
             required
             autoComplete="email"
+            autoFocus={autoFocusEmail}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="mt-1 w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus:border-black/40"
@@ -1426,6 +1911,7 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
         </label>
       </div>
 
+      {!isCompact ? (
       <details className="rounded-2xl border border-black/10 bg-white px-4 py-3">
         <summary className="cursor-pointer list-none text-sm font-semibold text-neutral-900">
           Optional details (helps us onboard you faster)
@@ -1501,16 +1987,29 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
           </label>
         </div>
       </details>
+      ) : null}
+
+      {TURNSTILE_SITE_KEY ? (
+        <div className="rounded-2xl border border-black/10 bg-white px-4 py-4">
+          <p className="text-xs font-semibold text-neutral-700">Verification</p>
+          <p className="mt-1 text-[11px] text-neutral-500">This helps block automated signups.</p>
+          <div className="mt-3" ref={turnstileContainerRef} />
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        <PrimaryButton type="submit" className="disabled:cursor-default disabled:bg-neutral-500">
+        <PrimaryButton
+          type="submit"
+          disabled={state === 'submitting' || state === 'success'}
+          className="disabled:cursor-default disabled:bg-neutral-500"
+        >
           {state === 'submitting'
             ? 'Submitting...'
             : state === 'success'
               ? alreadyOnList
                 ? 'Already on the list'
                 : 'You’re on the list'
-              : 'Submit application'}
+              : idleCtaLabel}
         </PrimaryButton>
 
         <p className="text-xs text-neutral-600">Low-volume, high-signal updates only.</p>
@@ -1524,10 +2023,10 @@ function CoachSignupForm({ mode }: { mode: CtaMode }) {
 
       {state === 'success' && (
         <div className="animate-toast-pop rounded-2xl border border-black/10 bg-white p-4">
-          <p className="text-sm font-semibold text-neutral-900">
-            {alreadyOnList ? 'You’re already on the list.' : 'You’re in.'}
+          <p className="text-sm font-semibold text-neutral-900">{alreadyOnList ? 'You’re already on the list.' : 'You’re in.'}</p>
+          <p className="mt-1 text-sm text-neutral-700">
+            We’ll email trial access + setup details. No marketing drip.
           </p>
-          <p className="mt-1 text-sm text-neutral-700">We’ll reach out as we open new founding coach seats. No marketing drip.</p>
         </div>
       )}
     </form>
@@ -1568,7 +2067,7 @@ function FaqSection() {
         <div className="max-w-2xl">
           <Kicker>FAQ</Kicker>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Questions coaches actually ask.</h2>
-          <p className="mt-3 text-sm text-neutral-700">
+          <p className="mt-3 text-base leading-relaxed text-neutral-700">
             If you&apos;re already on TrueCoach, Everfit or Sheets, skepticism is rational. Here&apos;s the short version of how Lungeable fits alongside what you use now.
           </p>
         </div>
@@ -1599,20 +2098,41 @@ function Footer() {
   return (
     <footer className="border-t border-black/10 bg-white">
       <Container>
-        <div className="flex flex-col gap-2 py-6 text-xs text-neutral-600 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 py-6 text-xs text-neutral-600 sm:flex-row sm:items-center sm:justify-between">
           <p>
             Built by <span className="font-medium text-neutral-900">Xuru Ren</span>.{' '}
             <span className="text-neutral-400">Site version {SITE_VERSION}.</span>
           </p>
-          <a
-            href="https://www.linkedin.com/in/xuru-ren-lungeablefounder"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-black"
-          >
-            <span>Connect on LinkedIn</span>
-            <span aria-hidden>↗</span>
-          </a>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <a
+              href="/privacy.html"
+              className="underline decoration-black/20 underline-offset-4 hover:decoration-black/40"
+            >
+              Privacy
+            </a>
+            <a
+              href="/terms.html"
+              className="underline decoration-black/20 underline-offset-4 hover:decoration-black/40"
+            >
+              Terms
+            </a>
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="underline decoration-black/20 underline-offset-4 hover:decoration-black/40"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+            <a
+              href="https://www.linkedin.com/in/xuru-ren-lungeablefounder"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1"
+            >
+              <span>LinkedIn</span>
+              <span aria-hidden>↗</span>
+            </a>
+          </div>
         </div>
       </Container>
     </footer>
@@ -1623,16 +2143,16 @@ function Footer() {
 /* Mobile sticky CTA                                                          */
 /* -------------------------------------------------------------------------- */
 
-function MobileBottomCta({ onDemo }: { onDemo: () => void }) {
+function MobileBottomCta({ onStartTrial }: { onStartTrial: () => void }) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-4 sm:hidden">
       <button
         type="button"
-        onClick={onDemo}
+        onClick={onStartTrial}
         className="pointer-events-auto inline-flex w-full max-w-md items-center justify-between rounded-full border border-black/10 bg-white/95 px-4 py-2 text-sm font-semibold text-black shadow-lg"
       >
-        <span>Book a demo</span>
-        <span className="text-xs text-neutral-600">30 min walkthrough →</span>
+        <span>Start free trial</span>
+        <span className="text-xs text-neutral-600">{TRIAL_DAYS} days free →</span>
       </button>
     </div>
   );

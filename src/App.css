@@ -41,7 +41,8 @@
 /* Anchor offset so in-page links don't hide beneath sticky bars */
 section[id],
 #how, #why, #coach, #faq, #join {
-  scroll-margin-top: clamp(72px, 12vh, 140px);
+  /* Announcement bar (40px) + header (64px) = ~104px */
+  scroll-margin-top: clamp(104px, 14vh, 168px);
 }
 
 /* Toast micro-anim (optional, subtle) */
@@ -49,7 +50,8 @@ section[id],
   0% { transform: translateY(6px); opacity: 0; }
   100% { transform: translateY(0); opacity: 1; }
 }
-.toast-pop {
+.toast-pop,
+.animate-toast-pop {
   animation: toast-pop 220ms ease-out both;
 }
 

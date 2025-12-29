@@ -5,6 +5,7 @@ export default {
   content: [
     './index.html',
     './privacy.html',
+    './terms.html',
     './public/**/*.html',
     './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],

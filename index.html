@@ -11,7 +11,7 @@
     <title>Lungeable — Adaptive training OS for remote strength coaches</title>
     <meta
       name="description"
-      content="Lungeable is an adaptive training OS for remote strength coaches. Draft weeks with guardrails, handle DM replans with Pocket Coach, and approve next week from Weekly Reports → Accept‑Week. Book a demo."
+      content="Lungeable is an adaptive training OS for remote strength coaches. Draft weeks with guardrails, handle DM replans with Pocket Coach, and approve next week from Weekly Reports → Accept‑Week. Coach beta includes a 14-day free trial."
     />
 
     <meta name="robots" content="index,follow" />
@@ -22,9 +22,9 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Theming -->
-    <!-- Match the violet accent used in the UI -->
-    <meta name="theme-color" content="#7c3aed" />
-    <meta name="color-scheme" content="dark light" />
+    <!-- Monochrome theme (Apple-ish) -->
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
 
@@ -34,8 +34,9 @@
     <link rel="canonical" href="%VITE_SITE_URL%/" />
 
     <!-- Performance: preconnect to services used on submit/analytics -->
-    <link rel="preconnect" href="https://formspree.io" />
     <link rel="preconnect" href="https://plausible.io" />
+    <link rel="preconnect" href="https://calendly.com" />
+    <link rel="preconnect" href="https://assets.calendly.com" />
     <!-- Optional: if you know your Supabase project host, add it here -->
     <!-- <link rel="preconnect" href="https://YOUR-PROJECT.supabase.co" /> -->
 
@@ -47,13 +48,13 @@
     />
     <meta
       property="og:description"
-      content="Adaptive training OS for remote strength coaches. Weekly Report → Accept‑Week, Pocket Coach DM replans, and guardrails that enforce your rules."
+      content="Adaptive training OS for remote strength coaches. Weekly Report → Accept‑Week, Pocket Coach DM replans, and guardrails that enforce your rules. Coach beta includes a 14-day free trial."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="%VITE_SITE_URL%/" />
     <!-- Most social platforms require absolute URLs for images -->
-    <meta property="og:image" content="%VITE_SITE_URL%/og-coach-dashboard.png" />
-    <meta property="og:image:secure_url" content="%VITE_SITE_URL%/og-coach-dashboard.png" />
+    <meta property="og:image" content="%VITE_SITE_URL%/og.png" />
+    <meta property="og:image:secure_url" content="%VITE_SITE_URL%/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:type" content="image/png" />
@@ -69,9 +70,9 @@
     />
     <meta
       name="twitter:description"
-      content="Program weeks in minutes, adjust in seconds. Weekly Reports → Accept‑Week, Pocket Coach DM replans, and evidence‑based guardrails."
+      content="Program weeks in minutes, adjust in seconds. Weekly Reports → Accept‑Week, Pocket Coach DM replans, and evidence‑based guardrails. Coach beta includes a 14-day free trial."
     />
-    <meta name="twitter:image" content="%VITE_SITE_URL%/og-coach-dashboard.png" />
+    <meta name="twitter:image" content="%VITE_SITE_URL%/og.png" />
 
     <!-- Structured data (keep App, but tilt description toward coaches) -->
     <script type="application/ld+json">
@@ -110,7 +111,8 @@
 
     <!-- Optional: font preloads (add if you host custom fonts) -->
     <!-- <link rel="preload" href="/fonts/YourFont.woff2" as="font" type="font/woff2" crossorigin> -->
-  </head>
+      <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
   <body>
     <!-- Accessible skip link (visible on keyboard focus, jumps to coach join form) -->
     <a
@@ -119,8 +121,8 @@
         position: absolute;
         left: -9999px;
         top: 0;
-        background: #7c3aed; /* violet-600 */
-        color: #0a0a0a;
+        background: #0a0a0a;
+        color: #ffffff;
         padding: 6px 10px;
         border-radius: 8px;
         font-weight: 600;

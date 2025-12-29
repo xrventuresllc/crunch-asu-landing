@@ -1,0 +1,2 @@
+[functions.notify-coach-waitlist]
+verify_jwt = false
